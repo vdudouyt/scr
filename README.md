@@ -1,6 +1,6 @@
 # scr
 
-A lightweight, detachable GNU Screen replacement with a Turbo Vision interface.
+A lightweight, detachable GNU Screen replacement with a modern grayscale TUI.
 
 `scr` runs a small daemon per session, owns the PTYs, and renders the UI with
 `ratatui` + `tui-term` + `vt100`. A foreground client attaches over a Unix
@@ -16,9 +16,8 @@ until the daemon ends.
   bracketed paste, SGR/X10 mouse protocols.
 - Scrollback with the mouse wheel; no scrollbar chrome.
 - Session picker (`scr -r`) with keyboard and mouse.
-- Turbo Vision chrome: blue desktop, gray panels, cyan active tab, red
-  hotkeys, double-line dialogs with drop shadows. The terminal canvas itself
-  stays black so tools that rely on a dark background remain readable.
+- Modern grayscale UI: gray text on a dark-gray canvas, inverted tab headers,
+  and borderless dialogs.
 - No async runtime, database, or network stack.
 
 ## Build
@@ -124,9 +123,9 @@ $
 ```
 
 The terminal gets every row below the tab strip and the full width. There is no
-status bar, no scrollbar column and no window frame border. Turbo Vision blue is
-used for the chrome; the terminal canvas is black, so programs that leave cells
-at their default colours do not get a blue wash.
+status bar, no scrollbar column and no window frame border. Tab headers are
+inverted (gray background, dark text), and dialogs are borderless panels over
+the terminal.
 
 ## Architecture
 
@@ -137,7 +136,7 @@ at their default colours do not get a blue wash.
   supplied by the attached client.
 - `src/term/` — PTY sessions, xterm key/mouse encoders, scrollback rules.
 - `src/app.rs` — tabs, prefix state machine, mouse routing, dialogs.
-- `src/ui/` — Turbo Vision theme, tab strip, pane, dialogs.
+- `src/ui/` — grayscale theme, tab strip, pane, borderless dialogs.
 - `src/picker.rs` — `scr -r` session picker.
 - `src/terminal.rs` — raw mode, alternate screen and the `scr-guard` restore
   helper.

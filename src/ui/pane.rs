@@ -33,7 +33,7 @@ pub fn render(f: &mut Frame, app: &mut App, l: Layout) {
     f.render_widget(
         PseudoTerminal::new(parser.screen())
             .cursor(cursor)
-            .style(Style::new().bg(theme::BLACK).fg(theme::GRAY)),
+            .style(Style::new().bg(theme::BG_BASE).fg(theme::FG)),
         l.term,
     );
     drop(parser);
@@ -47,17 +47,17 @@ pub fn render(f: &mut Frame, app: &mut App, l: Layout) {
 }
 
 /// vt100 leaves default foreground/background as `Reset`; give the pane the
-/// Turbo Vision canvas without touching colours a program chose itself.
+/// grayscale canvas without touching colours a program chose itself.
 fn apply_defaults(f: &mut Frame, term: Rect) {
     let buf = f.buffer_mut();
     for row in 0..term.height {
         for col in 0..term.width {
             if let Some(cell) = buf.cell_mut(Position::new(term.x + col, term.y + row)) {
                 if cell.fg == Color::Reset {
-                    cell.fg = theme::GRAY;
+                    cell.fg = theme::FG;
                 }
                 if cell.bg == Color::Reset {
-                    cell.bg = theme::BLACK;
+                    cell.bg = theme::BG_BASE;
                 }
             }
         }

@@ -1,4 +1,4 @@
-//! The Turbo Vision tab strip: tabs, close buttons and the new-tab button.
+//! The tab strip: tabs, close buttons and the new-tab button.
 
 use crate::app::{App, HoverTarget};
 use crate::ui::theme;
@@ -61,7 +61,7 @@ pub fn render(f: &mut Frame, area: Rect, app: &mut App) {
     let mut x = area.x;
     let tab_right = area.x + tabs_avail;
     if mark_l > 0 {
-        spans.push(Span::styled("‹", Style::new().fg(theme::DARK)));
+        spans.push(Span::styled("‹", Style::new().fg(theme::FG_FAINT)));
         x += 1;
     }
 
@@ -96,11 +96,7 @@ pub fn render(f: &mut Frame, area: Rect, app: &mut App) {
         } else {
             theme::tab_idle()
         };
-        let number = if is_active {
-            base.fg(theme::BLUE_DARK)
-        } else {
-            base.fg(theme::RED)
-        };
+        let number = base;
 
         spans.push(Span::styled(" ", base));
         spans.push(Span::styled(format!("{}", i + 1), number));
@@ -115,14 +111,14 @@ pub fn render(f: &mut Frame, area: Rect, app: &mut App) {
             base
         };
         spans.push(Span::styled("×", close_style));
-        // A blue cell separates adjacent tabs rather than joining two
+        // A canvas cell separates adjacent tabs rather than joining two
         // differently coloured blocks edge to edge.
-        spans.push(Span::styled(" ", Style::new().bg(theme::BLUE)));
+        spans.push(Span::styled(" ", Style::new().bg(theme::BG_BASE)));
         x += w;
     }
 
     if mark_r > 0 && x < tab_right {
-        spans.push(Span::styled("›", Style::new().fg(theme::DARK)));
+        spans.push(Span::styled("›", Style::new().fg(theme::FG_FAINT)));
     }
 
     f.render_widget(
@@ -143,7 +139,7 @@ pub fn render(f: &mut Frame, area: Rect, app: &mut App) {
             let style = if app.hover == HoverTarget::NewTab {
                 theme::tab_hover()
             } else {
-                Style::new().bg(theme::BLUE).fg(theme::GRAY)
+                Style::new().bg(theme::BG_BASE).fg(theme::FG_MUTED)
             };
             f.render_widget(Paragraph::new(Span::styled(" + ", style)), rect);
         }

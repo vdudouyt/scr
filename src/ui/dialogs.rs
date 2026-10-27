@@ -1,46 +1,33 @@
-//! Turbo Vision modal dialogs: the tab list and help.
+//! Borderless modal dialogs: the tab list and help.
 
 use crate::app::{App, DialogButton, HoverTarget};
 use crate::ui::theme;
 use ratatui::Frame;
-use ratatui::layout::{Alignment, Position, Rect};
-use ratatui::style::Style;
-use ratatui::symbols::border;
+use ratatui::layout::Rect;
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, Clear, Paragraph};
+use ratatui::widgets::{Block, Clear, Paragraph};
 
 pub fn dialog(f: &mut Frame, area: Rect, title: &str) {
-    // A hard black shadow, one cell right and down, as Turbo Vision drew it.
-    let shadow = Rect::new(
-        area.x.saturating_add(1).min(f.area().right().saturating_sub(1)),
-        area.y.saturating_add(1).min(f.area().bottom().saturating_sub(1)),
-        area.width.min(f.area().right().saturating_sub(area.x.saturating_add(1))),
-        area.height.min(f.area().bottom().saturating_sub(area.y.saturating_add(1))),
-    );
-    f.render_widget(Clear, shadow);
-    f.render_widget(Block::new().style(theme::dialog_shadow()), shadow);
     f.render_widget(Clear, area);
+    f.render_widget(Block::new().style(theme::dialog_bg()), area);
     f.render_widget(
-        Block::new()
-            .borders(Borders::ALL)
-            .border_set(border::DOUBLE)
-            .border_style(theme::dialog_frame())
-            .style(theme::dialog_bg())
-            .title(
-                Line::from(Span::styled(
-                    format!(" {title} "),
-                    theme::dialog_title(),
-                ))
-                .alignment(Alignment::Center),
-            ),
-        area,
+        Paragraph::new(Span::styled(title, theme::dialog_title()))
+            .style(theme::dialog_bg()),
+        Rect::new(
+            area.x + 2,
+            area.y,
+            area.width.saturating_sub(4),
+            1,
+        ),
     );
 }
 
+/// Content area inside a borderless dialog: two cells of horizontal padding,
+/// one title row and one blank separator row.
 pub fn inner(area: Rect) -> Rect {
     Rect::new(
         area.x + 2,
-        area.y + 1,
+        area.y + 2,
         area.width.saturating_sub(4),
         area.height.saturating_sub(2),
     )
@@ -101,11 +88,11 @@ pub fn tab_picker(f: &mut Frame, screen: Rect, app: &mut App) {
         let avail = inside.width.saturating_sub(8) as usize;
         let title = clip(title, avail);
         let mut spans = vec![
-            Span::styled(format!(" {:>2}  ", i + 1), row_style.fg(theme::RED)),
+            Span::styled(format!(" {:>2}  ", i + 1), row_style),
             Span::styled(title, row_style),
         ];
         if *active {
-            spans.push(Span::styled("  active", row_style.fg(theme::GREEN)));
+            spans.push(Span::styled("  active", row_style));
         }
         f.render_widget(
             Paragraph::new(Line::from(spans)).style(row_style),
@@ -120,7 +107,7 @@ pub fn tab_picker(f: &mut Frame, screen: Rect, app: &mut App) {
     ];
     let mut x = inside.x + 2;
     for (label, button, default) in labels {
-        let text = format!("[ {label} ]");
+        let text = format!(" {label} ");
         let rect = Rect::new(x, by, text.chars().count() as u16, 1);
         app.regions.dialog_buttons.push((rect, button));
         let style = if app.hover == HoverTarget::DialogButton(button) {
@@ -166,15 +153,15 @@ pub fn help(f: &mut Frame, screen: Rect, app: &mut App) {
         }
         let line = Line::from(vec![
             Span::styled(format!(" {:<12}", key), theme::key_hint()),
-            Span::styled(*text, Style::new().bg(theme::GRAY).fg(theme::BLACK)),
+            Span::styled(*text, theme::dialog_bg()),
         ]);
         f.render_widget(
-            Paragraph::new(line),
+            Paragraph::new(line).style(theme::dialog_bg()),
             Rect::new(inside.x, inside.y + i as u16, inside.width, 1),
         );
     }
     let button = DialogButton::Ok;
-    let label = "[ OK ]";
+    let label = " OK ";
     let by = inside.y + inside.height.saturating_sub(1);
     let x = inside.x + (inside.width.saturating_sub(label.len() as u16)) / 2;
     let brect = Rect::new(x, by, label.len() as u16, 1);
@@ -201,9 +188,4 @@ fn clip(s: &str, max: usize) -> String {
         out.push('…');
         out
     }
-}
-
-#[allow(dead_code)]
-fn _position(x: u16, y: u16) -> Position {
-    Position::new(x, y)
 }

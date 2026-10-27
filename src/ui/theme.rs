@@ -1,7 +1,5 @@
-//! Turbo Vision palette and semantic styles.
-//!
-//! These are deliberately the classic 16-colour values rather than a modern
-//! theme: blue desktop, light gray panels, cyan active tab, red hotkeys.
+//! Modern grayscale theme: gray text on a dark-gray canvas, with inverted
+//! tab headers and borderless dialogs.
 
 #![allow(dead_code)]
 
@@ -11,134 +9,116 @@ const fn rgb(r: u8, g: u8, b: u8) -> Color {
     Color::Rgb(r, g, b)
 }
 
-pub const BLUE: Color = rgb(0x00, 0x00, 0xaa);
-pub const BLUE_DARK: Color = rgb(0x00, 0x00, 0x55);
-pub const GRAY: Color = rgb(0xaa, 0xaa, 0xaa);
-pub const DARK: Color = rgb(0x55, 0x55, 0x55);
-pub const CYAN: Color = rgb(0x00, 0xaa, 0xaa);
-pub const CYAN_BRIGHT: Color = rgb(0x55, 0xff, 0xff);
-pub const WHITE: Color = rgb(0xff, 0xff, 0xff);
-pub const RED: Color = rgb(0xaa, 0x00, 0x00);
-pub const YELLOW: Color = rgb(0xff, 0xff, 0x55);
-pub const GREEN: Color = rgb(0x00, 0xaa, 0x00);
-pub const MAGENTA: Color = rgb(0xaa, 0x00, 0xaa);
-pub const BLACK: Color = rgb(0x00, 0x00, 0x00);
+// Surfaces.
+pub const BG_BASE: Color = rgb(0x1c, 0x1c, 0x1c);
+pub const BG_PANEL: Color = rgb(0x26, 0x26, 0x26);
+pub const BG_HOVER: Color = rgb(0x30, 0x30, 0x30);
+pub const BG_SEL: Color = rgb(0x3a, 0x3a, 0x3a);
+
+// Foreground.
+pub const FG: Color = rgb(0xb0, 0xb0, 0xb0);
+pub const FG_BRIGHT: Color = rgb(0xf0, 0xf0, 0xf0);
+pub const FG_MUTED: Color = rgb(0x80, 0x80, 0x80);
+pub const FG_FAINT: Color = rgb(0x55, 0x55, 0x59);
+pub const WHITE: Color = FG_BRIGHT;
 
 pub fn base() -> Style {
-    Style::new().bg(BLUE).fg(GRAY)
+    Style::new().bg(BG_BASE).fg(FG)
 }
 pub fn body() -> Style {
-    Style::new().fg(GRAY)
+    Style::new().fg(FG)
 }
 pub fn bright() -> Style {
-    Style::new().fg(WHITE)
+    Style::new().fg(FG_BRIGHT)
 }
 pub fn muted() -> Style {
-    Style::new().fg(DARK)
+    Style::new().fg(FG_MUTED)
 }
 pub fn faint() -> Style {
-    Style::new().fg(DARK)
+    Style::new().fg(FG_FAINT)
 }
 
-/// A tab that is not showing: a quiet label on the blue bar, not a bright
-/// block competing with the active tab.
+/// Tab headers are inverted: gray background, dark text. Idle tabs use the
+/// muted gray; the active tab is brighter, and hover is brighter still.
 pub fn tab_idle() -> Style {
-    Style::new().bg(BLUE).fg(GRAY)
+    Style::new().bg(FG_MUTED).fg(BG_BASE)
 }
-/// A tab that is showing.
 pub fn tab_active() -> Style {
-    Style::new().bg(CYAN).fg(BLACK).add_modifier(Modifier::BOLD)
+    Style::new()
+        .bg(FG)
+        .fg(BG_BASE)
+        .add_modifier(Modifier::BOLD)
 }
-/// Pointer over an idle tab, or the `+` button.
 pub fn tab_hover() -> Style {
     Style::new()
         .bg(WHITE)
-        .fg(BLACK)
+        .fg(BG_BASE)
         .add_modifier(Modifier::BOLD | Modifier::UNDERLINED)
 }
-/// Pointer over the tab that is already showing.
 pub fn tab_active_hover() -> Style {
     Style::new()
-        .bg(CYAN_BRIGHT)
-        .fg(BLACK)
+        .bg(WHITE)
+        .fg(BG_BASE)
         .add_modifier(Modifier::BOLD | Modifier::UNDERLINED)
 }
-/// Pointer over a tab's close button.
 pub fn tab_close_hover() -> Style {
     Style::new()
-        .bg(RED)
-        .fg(WHITE)
+        .bg(BG_BASE)
+        .fg(FG_BRIGHT)
         .add_modifier(Modifier::BOLD)
-}
-pub fn tab_number() -> Style {
-    Style::new().fg(RED)
-}
-pub fn tab_number_on_active() -> Style {
-    Style::new().fg(BLUE_DARK)
 }
 
 pub fn key_hint() -> Style {
-    Style::new()
-        .bg(GRAY)
-        .fg(BLUE_DARK)
-        .add_modifier(Modifier::BOLD)
+    Style::new().fg(FG_BRIGHT).add_modifier(Modifier::BOLD)
 }
 
+// Borderless dialogs: one filled panel, a title line, then content.
 pub fn dialog_bg() -> Style {
-    Style::new().bg(GRAY).fg(BLACK)
-}
-pub fn dialog_frame() -> Style {
-    Style::new().bg(BLUE).fg(WHITE).add_modifier(Modifier::BOLD)
+    Style::new().bg(BG_PANEL).fg(FG)
 }
 pub fn dialog_title() -> Style {
-    Style::new().bg(GRAY).fg(BLACK).add_modifier(Modifier::BOLD)
-}
-pub fn dialog_shadow() -> Style {
-    Style::new().bg(BLACK).fg(BLACK)
+    Style::new()
+        .bg(BG_PANEL)
+        .fg(FG_BRIGHT)
+        .add_modifier(Modifier::BOLD)
 }
 pub fn dialog_muted() -> Style {
-    Style::new().bg(GRAY).fg(DARK)
+    Style::new().bg(BG_PANEL).fg(FG_MUTED)
 }
 pub fn list_selected() -> Style {
-    Style::new().bg(CYAN).fg(BLACK).add_modifier(Modifier::BOLD)
+    Style::new()
+        .bg(FG)
+        .fg(BG_BASE)
+        .add_modifier(Modifier::BOLD)
 }
 pub fn list_hover() -> Style {
-    Style::new().bg(WHITE).fg(BLACK)
+    Style::new().bg(BG_HOVER).fg(FG_BRIGHT)
 }
 pub fn list_marker() -> Style {
-    Style::new().bg(GRAY).fg(RED).add_modifier(Modifier::BOLD)
+    Style::new().bg(BG_PANEL).fg(FG_MUTED)
 }
 pub fn button() -> Style {
-    Style::new().bg(GRAY).fg(BLACK)
+    Style::new().bg(BG_PANEL).fg(FG_MUTED)
 }
 pub fn button_hover() -> Style {
     Style::new()
-        .bg(WHITE)
-        .fg(BLACK)
+        .bg(FG)
+        .fg(BG_BASE)
         .add_modifier(Modifier::BOLD)
 }
 pub fn button_default() -> Style {
-    Style::new().bg(CYAN).fg(BLACK).add_modifier(Modifier::BOLD)
-}
-pub fn button_hotkey() -> Style {
     Style::new()
-        .bg(GRAY)
-        .fg(RED)
+        .bg(BG_HOVER)
+        .fg(FG_BRIGHT)
         .add_modifier(Modifier::BOLD)
 }
 
-pub fn scroll_track() -> Style {
-    Style::new().bg(BLACK).fg(DARK)
-}
-pub fn scroll_thumb() -> Style {
-    Style::new().bg(BLACK).fg(CYAN_BRIGHT)
-}
 pub fn live() -> Style {
-    Style::new().fg(GREEN)
+    Style::new().fg(FG)
 }
 pub fn warn() -> Style {
-    Style::new().fg(YELLOW)
+    Style::new().fg(FG_BRIGHT)
 }
 pub fn error() -> Style {
-    Style::new().fg(RED)
+    Style::new().fg(FG_BRIGHT)
 }

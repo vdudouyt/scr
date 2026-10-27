@@ -792,7 +792,7 @@ mod tests {
         a.hover = HoverTarget::Tab(1);
         term.draw(|f| crate::ui::draw(f, &mut a)).unwrap();
         let active = a.regions.tabs.iter().find(|(_, i)| *i == 1).unwrap().0;
-        assert_eq!(term.backend().buffer()[(active.x + 1, 0)].bg, theme::CYAN_BRIGHT);
+        assert_eq!(term.backend().buffer()[(active.x + 1, 0)].bg, theme::WHITE);
 
         a.hover = HoverTarget::Tab(0);
         term.draw(|f| crate::ui::draw(f, &mut a)).unwrap();
@@ -808,7 +808,7 @@ mod tests {
             .find(|(_, i)| *i == 0)
             .unwrap()
             .0;
-        assert_eq!(term.backend().buffer()[(close.x, 0)].bg, theme::RED);
+        assert_eq!(term.backend().buffer()[(close.x, 0)].bg, theme::BG_BASE);
 
         a.hover = HoverTarget::NewTab;
         term.draw(|f| crate::ui::draw(f, &mut a)).unwrap();

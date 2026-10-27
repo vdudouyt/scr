@@ -1,4 +1,4 @@
-//! `scr -r` session picker, styled as a Turbo Vision dialog.
+//! `scr -r` session picker, styled as a borderless dialog.
 
 use crate::proto::SessionInfo;
 use crate::terminal;
@@ -9,7 +9,6 @@ use crate::server::backend::AnsiBackend;
 use ratatui::Terminal;
 use ratatui::crossterm::event::{self, Event, KeyCode, KeyEventKind, MouseButton, MouseEventKind};
 use ratatui::layout::{Position, Rect};
-use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Paragraph};
 use std::time::{Duration, Instant};
@@ -212,11 +211,7 @@ fn draw(f: &mut ratatui::Frame, sessions: &[SessionInfo], state: &mut State) {
         };
         let name = clip(&s.name, 18);
         let state_text = if s.attached { "attached" } else { "detached" };
-        let state_style = if s.attached {
-            base.fg(theme::YELLOW)
-        } else {
-            base.fg(theme::GREEN)
-        };
+        let state_style = base;
         let cwd = clip(&s.cwd, (inside.width as usize).saturating_sub(42));
         let spans = vec![
             Span::styled(format!(" {name:<18} "), base),
@@ -235,7 +230,7 @@ fn draw(f: &mut ratatui::Frame, sessions: &[SessionInfo], state: &mut State) {
         "Enter attach · double-click a row · Esc cancel",
     );
     let msg_style = if state.message.is_some() {
-        Style::new().bg(theme::GRAY).fg(theme::RED)
+        theme::dialog_bg().fg(theme::FG_BRIGHT)
     } else {
         theme::dialog_muted()
     };
@@ -248,7 +243,7 @@ fn draw(f: &mut ratatui::Frame, sessions: &[SessionInfo], state: &mut State) {
     let labels = [("Attach", Button::Attach, true), ("Cancel", Button::Cancel, false)];
     let mut x = inside.x + 2;
     for (label, button, default) in labels {
-        let text = format!("[ {label} ]");
+        let text = format!(" {label} ");
         let r = Rect::new(x, by, text.chars().count() as u16, 1);
         state.buttons.push((r, button));
         let style = if state.hover == Hover::Button(button) {
