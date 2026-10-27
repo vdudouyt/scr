@@ -96,11 +96,10 @@ pub fn render(f: &mut Frame, area: Rect, app: &mut App) {
         } else {
             theme::tab_idle()
         };
-        let number = base;
 
         spans.push(Span::styled(" ", base));
-        spans.push(Span::styled(format!("{}", i + 1), number));
-        spans.push(Span::styled(":", number));
+        spans.push(Span::styled(format!("{}", i + 1), base));
+        spans.push(Span::styled(":", base));
         spans.push(Span::styled(title, base));
         spans.push(Span::styled(" ", base));
         let close_rect = Rect::new(x + w - 2, area.y, 1, 1);
