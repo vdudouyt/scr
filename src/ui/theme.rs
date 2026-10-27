@@ -14,6 +14,9 @@ pub const BG_BASE: Color = rgb(0x1c, 0x1c, 0x1c);
 pub const BG_PANEL: Color = rgb(0x26, 0x26, 0x26);
 pub const BG_HOVER: Color = rgb(0x30, 0x30, 0x30);
 pub const BG_SEL: Color = rgb(0x3a, 0x3a, 0x3a);
+/// Hover: a step lighter than the active tab, so pointing at one reads even
+/// next to the current tab.
+pub const BG_HOVER_LIGHT: Color = rgb(0x4a, 0x4a, 0x4a);
 
 // Foreground.
 pub const FG: Color = rgb(0xb0, 0xb0, 0xb0);
@@ -48,13 +51,13 @@ pub fn tab_active() -> Style {
 }
 pub fn tab_hover() -> Style {
     Style::new()
-        .bg(BG_BASE)
-        .fg(FG_BRIGHT)
+        .bg(BG_HOVER_LIGHT)
+        .fg(WHITE)
         .add_modifier(Modifier::BOLD)
 }
 pub fn tab_active_hover() -> Style {
     Style::new()
-        .bg(BG_SEL)
+        .bg(BG_HOVER_LIGHT)
         .fg(WHITE)
         .add_modifier(Modifier::BOLD)
 }

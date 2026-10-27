@@ -775,7 +775,10 @@ mod tests {
         a.hover = HoverTarget::Tab(0);
         term.draw(|f| crate::ui::draw(f, &mut a)).unwrap();
         let idle = a.regions.tabs.iter().find(|(_, i)| *i == 0).unwrap().0;
-        assert_eq!(term.backend().buffer()[(idle.x + 1, 0)].bg, theme::BG_BASE);
+        assert_eq!(
+            term.backend().buffer()[(idle.x + 1, 0)].bg,
+            theme::BG_HOVER_LIGHT
+        );
 
         a.hover = HoverTarget::TabClose(0);
         term.draw(|f| crate::ui::draw(f, &mut a)).unwrap();
@@ -791,6 +794,9 @@ mod tests {
         a.hover = HoverTarget::NewTab;
         term.draw(|f| crate::ui::draw(f, &mut a)).unwrap();
         let plus = a.regions.new_tab.unwrap();
-        assert_eq!(term.backend().buffer()[(plus.x, 0)].bg, theme::BG_BASE);
+        assert_eq!(
+            term.backend().buffer()[(plus.x, 0)].bg,
+            theme::BG_HOVER_LIGHT
+        );
     }
 }
