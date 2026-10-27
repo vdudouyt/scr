@@ -47,16 +47,10 @@ pub fn tab_active() -> Style {
     Style::new().bg(BG_HOVER).fg(FG_BRIGHT)
 }
 pub fn tab_hover() -> Style {
-    Style::new()
-        .bg(BG_SEL)
-        .fg(FG_BRIGHT)
-        .add_modifier(Modifier::UNDERLINED)
+    Style::new().bg(BG_SEL).fg(FG_BRIGHT)
 }
 pub fn tab_active_hover() -> Style {
-    Style::new()
-        .bg(BG_SEL)
-        .fg(WHITE)
-        .add_modifier(Modifier::UNDERLINED)
+    Style::new().bg(BG_SEL).fg(WHITE)
 }
 pub fn tab_close_hover() -> Style {
     Style::new()
