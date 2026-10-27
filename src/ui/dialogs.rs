@@ -165,7 +165,7 @@ pub fn help(f: &mut Frame, screen: Rect, app: &mut App) {
             break;
         }
         let line = Line::from(vec![
-            Span::styled(format!(" {:<12}", key), theme::status_value().bg(theme::GRAY)),
+            Span::styled(format!(" {:<12}", key), theme::key_hint()),
             Span::styled(*text, Style::new().bg(theme::GRAY).fg(theme::BLACK)),
         ]);
         f.render_widget(

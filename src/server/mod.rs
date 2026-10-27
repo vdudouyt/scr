@@ -152,11 +152,6 @@ fn event_loop(app: &mut App, rx: Receiver<Event>, event_tx: Sender<Event>) -> Re
             detach_client(&mut client);
             return Ok(());
         }
-        if app.flash.is_some() && app.flash_text().is_none() {
-            app.flash = None;
-            dirty = true;
-        }
-
         if dirty {
             if let Some(c) = client.as_mut() {
                 if let Err(e) = draw(c, app) {

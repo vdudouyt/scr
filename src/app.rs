@@ -12,9 +12,7 @@ use ratatui::crossterm::event::{
 use ratatui::layout::{Position, Rect};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::Sender;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-
-const FLASH_TIME: Duration = Duration::from_secs(3);
+use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Mode {
@@ -87,7 +85,6 @@ pub struct App {
     pub tab_picker: Option<TabPickerState>,
     pub hover: HoverTarget,
     pub regions: Regions,
-    pub flash: Option<(String, Instant)>,
     pub size: (u16, u16),
     pub should_quit: bool,
     pub detach_requested: bool,
@@ -125,7 +122,6 @@ impl App {
             tab_picker: None,
             hover: HoverTarget::None,
             regions: Regions::default(),
-            flash: None,
             size,
             should_quit: false,
             detach_requested: false,
@@ -315,19 +311,6 @@ impl App {
         }
     }
 
-    // ---- status ----------------------------------------------------------
-
-    pub fn flash(&mut self, text: impl Into<String>) {
-        self.flash = Some((text.into(), Instant::now()));
-    }
-
-    pub fn flash_text(&self) -> Option<&str> {
-        match &self.flash {
-            Some((text, at)) if at.elapsed() < FLASH_TIME => Some(text),
-            _ => None,
-        }
-    }
-
     // ---- input -----------------------------------------------------------
 
     pub fn on_key(&mut self, key: KeyEvent) {
@@ -380,7 +363,7 @@ impl App {
         match key.code {
             KeyCode::Char('c' | 'C') => {
                 if let Err(e) = self.add_tab(None) {
-                    self.flash(format!("Could not open tab: {e}"));
+                    eprintln!("scr: could not open tab: {e:#}");
                 }
             }
             KeyCode::Char('d' | 'D') => {
@@ -403,7 +386,7 @@ impl App {
                 self.goto_tab_number(n);
             }
             KeyCode::Esc => {}
-            other => self.flash(format!("Unknown Ctrl+A command: {other:?}")),
+            other => eprintln!("scr: unknown Ctrl+A command: {other:?}"),
         }
     }
 
@@ -571,7 +554,7 @@ impl App {
             HoverTarget::Tab(i) => self.select_tab(i),
             HoverTarget::NewTab => {
                 if let Err(e) = self.add_tab(None) {
-                    self.flash(format!("Could not open tab: {e}"));
+                    eprintln!("scr: could not open tab: {e:#}");
                 }
             }
             HoverTarget::Pane => {

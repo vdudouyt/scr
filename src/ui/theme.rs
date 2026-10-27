@@ -1,7 +1,7 @@
 //! Turbo Vision palette and semantic styles.
 //!
 //! These are deliberately the classic 16-colour values rather than a modern
-//! theme: blue desktop, light gray panels, cyan selection, red hotkeys.
+//! theme: blue desktop, light gray panels, cyan active tab, red hotkeys.
 
 #![allow(dead_code)]
 
@@ -77,26 +77,11 @@ pub fn tab_number_on_active() -> Style {
     Style::new().fg(BLUE_DARK)
 }
 
-pub fn statusbar() -> Style {
-    Style::new().bg(GRAY).fg(BLACK)
-}
-pub fn status_key() -> Style {
+pub fn key_hint() -> Style {
     Style::new()
         .bg(GRAY)
-        .fg(RED)
+        .fg(BLUE_DARK)
         .add_modifier(Modifier::BOLD)
-}
-pub fn status_value() -> Style {
-    Style::new().bg(GRAY).fg(BLUE_DARK).add_modifier(Modifier::BOLD)
-}
-pub fn status_hover() -> Style {
-    Style::new()
-        .bg(WHITE)
-        .fg(BLACK)
-        .add_modifier(Modifier::BOLD)
-}
-pub fn prefix_bar() -> Style {
-    Style::new().bg(CYAN).fg(BLACK).add_modifier(Modifier::BOLD)
 }
 
 pub fn dialog_bg() -> Style {

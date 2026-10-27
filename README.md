@@ -117,7 +117,7 @@ UI artifacts.
 One row of chrome only:
 
 ```text
- 1:bash ×  2:vim ×  +                                            work · 2 tabs
+ 1:bash ×  2:vim ×  +
 $ ls -la
 src  Cargo.toml  README.md
 $

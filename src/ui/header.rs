@@ -1,12 +1,10 @@
-//! The Turbo Vision tab strip: tabs, close buttons, new-tab button, and the
-//! session name — replaced briefly by a flash message or Ctrl+A state — on the
-//! right.
+//! The Turbo Vision tab strip: tabs, close buttons and the new-tab button.
 
 use crate::app::{App, HoverTarget};
 use crate::ui::theme;
 use ratatui::Frame;
-use ratatui::layout::{Alignment, Rect};
-use ratatui::style::{Modifier, Style};
+use ratatui::layout::Rect;
+use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 
@@ -41,38 +39,8 @@ pub fn render(f: &mut Frame, area: Rect, app: &mut App) {
     if area.width == 0 {
         return;
     }
-    let flash = app.flash_text().map(str::to_string);
-    let (right_text, right_style) = if app.prefix {
-        ("Ctrl+A".to_string(), theme::prefix_bar())
-    } else if let Some(text) = &flash {
-        (
-            text.clone(),
-            Style::new()
-                .bg(theme::BLUE_DARK)
-                .fg(theme::WHITE)
-                .add_modifier(Modifier::BOLD),
-        )
-    } else {
-        (
-            format!(
-                "{} · {} tab{}",
-                app.name,
-                app.tabs.len(),
-                if app.tabs.len() == 1 { "" } else { "s" }
-            ),
-            Style::new().bg(theme::BLUE).fg(theme::GRAY),
-        )
-    };
-    // Keep the tab window stable while a flash message comes and goes.
-    let session_reserve = if area.width >= 44 {
-        20u16.min(area.width / 3)
-    } else {
-        0
-    };
-    let right = clip_title(&right_text, session_reserve.saturating_sub(2) as usize);
     let plus_w = if area.width >= 8 { PLUS } else { 0 };
-    let avail = area.width.saturating_sub(session_reserve);
-    let tabs_avail = avail.saturating_sub(plus_w);
+    let tabs_avail = area.width.saturating_sub(plus_w);
     let widths: Vec<u16> = app
         .tabs
         .iter()
@@ -179,23 +147,6 @@ pub fn render(f: &mut Frame, area: Rect, app: &mut App) {
             };
             f.render_widget(Paragraph::new(Span::styled(" + ", style)), rect);
         }
-    }
-
-    if session_reserve > 0 {
-        let rect = Rect::new(
-            area.x + area.width - session_reserve,
-            area.y,
-            session_reserve,
-            1,
-        );
-        f.render_widget(
-            Paragraph::new(Line::from(Span::styled(
-                format!(" {right} "),
-                right_style,
-            )))
-            .alignment(Alignment::Right),
-            rect,
-        );
     }
 }
 
