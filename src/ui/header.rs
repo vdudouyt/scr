@@ -16,7 +16,8 @@ fn digits(n: usize) -> u16 {
 }
 
 fn width_of(n: usize, title: &str) -> u16 {
-    digits(n) + title.chars().count() as u16 + 5
+    // " N:title " + "×"
+    digits(n) + title.chars().count() as u16 + 4
 }
 
 fn clip_title(title: &str, max: usize) -> String {
@@ -67,20 +68,20 @@ pub fn render(f: &mut Frame, area: Rect, app: &mut App) {
 
     for (i, tab) in app.tabs.iter().enumerate().take(end).skip(start) {
         let max_w = tab_right.saturating_sub(x);
-        if max_w < 5 {
+        if max_w < 4 {
             break;
         }
         let mut title = clip_title(&tab.title, MAX_TITLE);
         let mut w = width_of(i + 1, &title);
         if w > max_w {
-            let max_title = max_w.saturating_sub(5) as usize;
+            let max_title = max_w.saturating_sub(4) as usize;
             title = clip_title(&title, max_title);
             w = width_of(i + 1, &title);
         }
         if w > max_w {
             w = max_w;
         }
-        if w < 5 {
+        if w < 4 {
             break;
         }
         let rect = Rect::new(x, area.y, w, 1);
@@ -102,7 +103,7 @@ pub fn render(f: &mut Frame, area: Rect, app: &mut App) {
         spans.push(Span::styled(":", base));
         spans.push(Span::styled(title, base));
         spans.push(Span::styled(" ", base));
-        let close_rect = Rect::new(x + w - 2, area.y, 1, 1);
+        let close_rect = Rect::new(x + w - 1, area.y, 1, 1);
         app.regions.tab_closes.push((close_rect, i));
         let close_style = if app.hover == HoverTarget::TabClose(i) {
             base.patch(theme::tab_close_hover())
@@ -110,9 +111,6 @@ pub fn render(f: &mut Frame, area: Rect, app: &mut App) {
             base
         };
         spans.push(Span::styled("×", close_style));
-        // A canvas cell separates adjacent tabs rather than joining two
-        // differently coloured blocks edge to edge.
-        spans.push(Span::styled(" ", Style::new().bg(theme::BG_BASE)));
         x += w;
     }
 
