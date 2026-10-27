@@ -50,16 +50,10 @@ pub fn tab_active() -> Style {
     Style::new().bg(BG_SEL).fg(FG_BRIGHT)
 }
 pub fn tab_hover() -> Style {
-    Style::new()
-        .bg(BG_HOVER_LIGHT)
-        .fg(WHITE)
-        .add_modifier(Modifier::BOLD)
+    Style::new().bg(BG_HOVER_LIGHT).fg(WHITE)
 }
 pub fn tab_active_hover() -> Style {
-    Style::new()
-        .bg(BG_HOVER_LIGHT)
-        .fg(WHITE)
-        .add_modifier(Modifier::BOLD)
+    Style::new().bg(BG_HOVER_LIGHT).fg(WHITE)
 }
 pub fn tab_close_hover() -> Style {
     Style::new()
