@@ -32,8 +32,9 @@ install -m755 target/release/scr ~/.local/bin/scr
 
 The project uses the same ratatui/tui-term/portable-pty/vt100 versions as the
 OpenAdmin terminal stack (`ratatui 0.30.2`, `tui-term 0.3.4`, `vt100 0.16.2`,
-`portable-pty 0.9.0`, `crossterm 0.29.0`). Clipboard writes use crossterm's
-OSC 52 command.
+`portable-pty 0.9.0`, `crossterm 0.29.0`). `crossterm` is already a transitive
+dependency of ratatui in OpenAdmin; the direct entry only enables its optional
+OSC 52 clipboard command. Clipboard writes use that command.
 
 ## Usage
 
