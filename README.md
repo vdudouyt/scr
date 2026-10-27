@@ -14,8 +14,7 @@ until the daemon ends.
 - Hover feedback on tabs, close buttons, `+`, dialog rows and buttons.
 - Full xterm key and mouse encoding: DECCKM arrows, modified keys, F1–F12,
   bracketed paste, SGR/X10 mouse protocols.
-- Scrollback with a Turbo Vision scrollbar, wheel scrolling and scrollbar
-  dragging.
+- Scrollback with the mouse wheel; no scrollbar chrome.
 - Drag-select text and copy it with OSC 52. `Shift`+drag selects even when the
   running program has grabbed the mouse.
 - Session picker (`scr -r`) with keyboard and mouse.
@@ -77,7 +76,6 @@ reach the child.
 - Click a tab to switch, `×` to close, `+` to create.
 - Hover highlights the element under the pointer.
 - The wheel scrolls the terminal back; typing or pasting returns to the prompt.
-- Drag the scrollbar thumb, or click the track to jump.
 - A program that enabled mouse reporting receives correctly encoded events.
   `Shift`+drag keeps selection for you.
 - Dialogs are fully mouse-usable.
@@ -115,20 +113,19 @@ time; `scr -d` detaches it.
 
 ## Layout
 
-Two rows of chrome only:
+One row of chrome only:
 
 ```text
 ▐1:bash ×▌▐2:vim ×▌ +                                                  work
-$ ls -la                                                                  ▲
-src  Cargo.toml  README.md                                                █
-$                                                                         ▼
- ^A C New   ^A D Detach   ^A " Tabs   ^A ? Help                work · 2 tabs
+$ ls -la
+src  Cargo.toml  README.md
+$
 ```
 
-The terminal gets `rows - 2` and `cols - 1`; the last column is the scrollbar.
-There is no window frame border. Turbo Vision blue is used for the chrome; the
-terminal canvas is black, so programs that leave cells at their default colours
-do not get a blue wash.
+The terminal gets every row below the tab strip and the full width. There is no
+status bar, no scrollbar column and no window frame border. Turbo Vision blue is
+used for the chrome; the terminal canvas is black, so programs that leave cells
+at their default colours do not get a blue wash.
 
 ## Architecture
 
@@ -139,7 +136,7 @@ do not get a blue wash.
   supplied by the attached client.
 - `src/term/` — PTY sessions, xterm key/mouse encoders, scrollback rules.
 - `src/app.rs` — tabs, prefix state machine, mouse routing, selection, dialogs.
-- `src/ui/` — Turbo Vision theme, tab strip, status line, pane, dialogs.
+- `src/ui/` — Turbo Vision theme, tab strip, pane, dialogs.
 - `src/picker.rs` — `scr -r` session picker.
 - `src/session.rs` — runtime directory, locks, discovery, daemon spawning.
 

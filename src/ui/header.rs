@@ -1,11 +1,12 @@
 //! The Turbo Vision tab strip: tabs, close buttons, new-tab button, and the
-//! session name on the right.
+//! session name — replaced briefly by a flash message or Ctrl+A state — on the
+//! right.
 
 use crate::app::{App, HoverTarget};
 use crate::ui::theme;
 use ratatui::Frame;
 use ratatui::layout::{Alignment, Rect};
-use ratatui::style::Style;
+use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 
@@ -40,9 +41,26 @@ pub fn render(f: &mut Frame, area: Rect, app: &mut App) {
     if area.width == 0 {
         return;
     }
-    let name = clip_title(&app.name, 24);
-    let session_reserve = if area.width >= 58 {
-        (name.chars().count() as u16 + 2).min(area.width / 3)
+    let flash = app.flash_text().map(str::to_string);
+    let (right_text, right_style) = if app.prefix {
+        ("Ctrl+A".to_string(), theme::prefix_bar())
+    } else if let Some(text) = &flash {
+        (
+            text.clone(),
+            Style::new()
+                .bg(theme::BLUE)
+                .fg(theme::WHITE)
+                .add_modifier(Modifier::BOLD),
+        )
+    } else {
+        (
+            app.name.clone(),
+            Style::new().bg(theme::BLUE).fg(theme::GRAY),
+        )
+    };
+    let right = clip_title(&right_text, 24);
+    let session_reserve = if area.width >= 40 {
+        (right.chars().count() as u16 + 2).min(area.width / 3)
     } else {
         0
     };
@@ -164,8 +182,8 @@ pub fn render(f: &mut Frame, area: Rect, app: &mut App) {
         );
         f.render_widget(
             Paragraph::new(Line::from(Span::styled(
-                format!(" {name} "),
-                Style::new().bg(theme::BLUE).fg(theme::GRAY),
+                format!(" {right} "),
+                right_style,
             )))
             .alignment(Alignment::Right),
             rect,

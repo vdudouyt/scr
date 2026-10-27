@@ -6,62 +6,19 @@
 //! there is. Both are here, as functions over the screen rather than methods
 //! that lock, so the renderer can use them under the lock it already holds.
 
-/// How much history a pane holds, and how far back its view is.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct History {
-    /// Lines that have scrolled off the top and been kept.
-    pub lines: usize,
-    /// How far back the view is, in lines: 0 is the live screen.
-    pub offset: usize,
-}
-
-/// The pane's history, or `None` when there is none to show — nothing has
-/// scrolled off yet, or the alternate screen is up. vt100 gives that grid no
-/// history at all, which is what keeps mc, vim and less out of this.
-///
-/// Takes `&mut` only to read. vt100 keeps the stored line count private and
-/// reveals it by clamping: an offset set past the end lands on the oldest line
-/// held. So the offset is pushed to the end, read, and put back. Call it under
-/// a lock the caller already holds; std's `Mutex` is not reentrant.
-pub fn history(screen: &mut vt100::Screen) -> Option<History> {
-    if screen.alternate_screen() {
-        return None;
-    }
-    let offset = screen.scrollback();
-    screen.set_scrollback(usize::MAX);
-    let lines = screen.scrollback();
-    screen.set_scrollback(offset);
-    (lines > 0).then_some(History { lines, offset })
-}
-
 /// Move the view `lines` back in time; negative moves toward the live screen.
 ///
 /// Refused where the wheel belongs to the program rather than to us:
 /// - on the alternate screen, where a full-screen program is drawing. Nor is
 ///   the wheel turned into arrow keys there: mc and its like are not scrolled.
-/// - when the program asked for mouse reports. Over the terminal it is sent
-///   the wheel; over the pane's title or scrollbar it cannot be told a
-///   position, but the wheel is still its, so the history stays put.
+/// - when the program asked for mouse reports. The wheel is sent to the
+///   program, so the history stays put.
 pub fn scroll(screen: &mut vt100::Screen, lines: isize) {
     if screen.alternate_screen() || screen.mouse_protocol_mode() != vt100::MouseProtocolMode::None {
         return;
     }
     // vt100 clamps at the oldest line; the live screen is 0.
     screen.set_scrollback(screen.scrollback().saturating_add_signed(lines));
-}
-
-/// Put the view `offset` lines back, for a drag on the pane's scrollbar.
-///
-/// Unlike the wheel, not refused when the program asked for mouse reports: the
-/// bar is drawn in a column the program does not have, and is never told
-/// about, so a press on it can only have been meant for the bar. The alternate
-/// screen has no history and draws no bar, so there is nothing to set.
-pub fn set_offset(screen: &mut vt100::Screen, offset: usize) {
-    if screen.alternate_screen() {
-        return;
-    }
-    // vt100 clamps at the oldest line.
-    screen.set_scrollback(offset);
 }
 
 #[cfg(test)]
@@ -90,29 +47,6 @@ mod tests {
             .next()
             .unwrap_or("")
             .to_string()
-    }
-
-    /// The count is read through vt100's clamp, which moves the view to read
-    /// it — so it has to come back to where it was.
-    #[test]
-    fn history_counts_the_lines_held_and_leaves_the_view_where_it_was() {
-        let mut p = fed(20);
-        p.screen_mut().set_scrollback(3);
-        assert_eq!(
-            history(p.screen_mut()),
-            Some(History {
-                lines: 16,
-                offset: 3
-            })
-        );
-        assert_eq!(p.screen().scrollback(), 3, "the view was not moved");
-        assert_eq!(top_row(&p), "line 14");
-    }
-
-    #[test]
-    fn nothing_scrolled_off_means_no_history() {
-        let mut p = fed(3);
-        assert_eq!(history(p.screen_mut()), None);
     }
 
     #[test]
@@ -154,36 +88,13 @@ mod tests {
         scroll(p.screen_mut(), 3);
 
         p.process(b"\x1b[?1049h");
-        assert_eq!(history(p.screen_mut()), None);
         scroll(p.screen_mut(), 5);
         assert_eq!(p.screen().scrollback(), 0, "the wheel did nothing");
 
         // Leaving it, the shell's history is all still there.
         p.process(b"\x1b[?1049l");
-        assert_eq!(
-            history(p.screen_mut()),
-            Some(History {
-                lines: 16,
-                offset: 0
-            })
-        );
-    }
-
-    /// The scrollbar is not the program's, even when the wheel is: a drag on
-    /// it moves the view. There is still nothing to move on the alternate
-    /// screen.
-    #[test]
-    fn a_drag_on_the_bar_sets_the_view_even_when_the_program_has_the_mouse() {
-        let mut p = fed(20);
-        p.process(b"\x1b[?1000h");
-        set_offset(p.screen_mut(), 5);
-        assert_eq!(p.screen().scrollback(), 5);
-        set_offset(p.screen_mut(), 1000);
-        assert_eq!(p.screen().scrollback(), 16, "no further back than held");
-
-        p.process(b"\x1b[?1049h");
-        set_offset(p.screen_mut(), 3);
-        assert_eq!(p.screen().scrollback(), 0);
+        scroll(p.screen_mut(), 1000);
+        assert_eq!(p.screen().scrollback(), 16);
     }
 
     /// A program that asked for the mouse owns the wheel, even where it cannot

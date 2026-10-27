@@ -3,10 +3,8 @@
 
 use crate::proto::{SessionInfo, TabInfo};
 use crate::term::keys;
-use crate::term::scrollback;
 use crate::term::session::{SessionId, Spawn, TermEvent, TerminalSession};
 use crate::ui;
-use crate::ui::pane::ScrollGeometry;
 use anyhow::{Context, Result};
 use ratatui::crossterm::event::{
     KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
@@ -39,7 +37,6 @@ pub enum HoverTarget {
     TabClose(usize),
     NewTab,
     Pane,
-    Scrollbar,
     DialogRow(usize),
     DialogButton(DialogButton),
 }
@@ -50,7 +47,6 @@ pub struct Regions {
     pub tab_closes: Vec<(Rect, usize)>,
     pub new_tab: Option<Rect>,
     pub pane: Option<Rect>,
-    pub pane_bar: Option<Rect>,
     pub dialog_rows: Vec<(Rect, usize)>,
     pub dialog_buttons: Vec<(Rect, DialogButton)>,
 }
@@ -61,7 +57,6 @@ impl Regions {
         self.tab_closes.clear();
         self.new_tab = None;
         self.pane = None;
-        self.pane_bar = None;
         self.dialog_rows.clear();
         self.dialog_buttons.clear();
     }
@@ -86,11 +81,6 @@ impl Selection {
     pub fn is_empty(self) -> bool {
         self.start == self.end
     }
-}
-
-#[derive(Debug, Clone, Copy)]
-struct ScrollDrag {
-    grab: i32,
 }
 
 pub struct Tab {
@@ -119,7 +109,6 @@ pub struct App {
     pub hover: HoverTarget,
     pub regions: Regions,
     pub selection: Option<Selection>,
-    scroll_drag: Option<ScrollDrag>,
     pub flash: Option<(String, Instant)>,
     pub size: (u16, u16),
     pub should_quit: bool,
@@ -162,7 +151,6 @@ impl App {
             hover: HoverTarget::None,
             regions: Regions::default(),
             selection: None,
-            scroll_drag: None,
             flash: None,
             size,
             should_quit: false,
@@ -202,7 +190,6 @@ impl App {
             let _ = tab.session.resize((h, w));
         }
         self.selection = None;
-        self.scroll_drag = None;
     }
 
     pub fn active_tab(&self) -> Option<&Tab> {
@@ -341,7 +328,6 @@ impl App {
         self.prefix = false;
         self.hover = HoverTarget::None;
         self.selection = None;
-        self.scroll_drag = None;
     }
 
     pub fn info(&self, attached: bool) -> SessionInfo {
@@ -569,10 +555,6 @@ impl App {
             return;
         }
 
-        if self.drag_scrollbar(&ev, at) {
-            return;
-        }
-
         match ev.kind {
             MouseEventKind::ScrollUp => self.wheel(-3, at),
             MouseEventKind::ScrollDown => self.wheel(3, at),
@@ -613,9 +595,6 @@ impl App {
         }
         if self.regions.new_tab.is_some_and(|r| r.contains(at)) {
             return HoverTarget::NewTab;
-        }
-        if self.regions.pane_bar.is_some_and(|r| r.contains(at)) {
-            return HoverTarget::Scrollbar;
         }
         if self.regions.pane.is_some_and(|r| r.contains(at)) {
             return HoverTarget::Pane;
@@ -808,87 +787,11 @@ impl App {
         true
     }
 
-    fn drag_scrollbar(&mut self, ev: &MouseEvent, at: Position) -> bool {
-        match ev.kind {
-            MouseEventKind::Down(MouseButton::Left) => {
-                self.scroll_drag = None;
-                let Some(bar) = self.regions.pane_bar else {
-                    return false;
-                };
-                if !bar.contains(at) {
-                    return false;
-                }
-                let Some((g, pos, lines)) = self.bar_geometry() else {
-                    return true;
-                };
-                let row = i32::from(at.y) - i32::from(bar.y + 1);
-                let (start, len) = g.thumb(pos);
-                let (start, len) = (start as i32, len as i32);
-                let grab = if (start..start + len).contains(&row) {
-                    row - start
-                } else {
-                    len / 2
-                };
-                self.scroll_drag = Some(ScrollDrag { grab });
-                self.apply_scroll_drag(lines, &g, row - grab);
-                true
-            }
-            MouseEventKind::Drag(MouseButton::Left) => {
-                let Some(d) = self.scroll_drag else {
-                    return false;
-                };
-                let Some((g, _, lines)) = self.bar_geometry() else {
-                    self.scroll_drag = None;
-                    return true;
-                };
-                let Some(bar) = self.regions.pane_bar else {
-                    self.scroll_drag = None;
-                    return true;
-                };
-                let row = i32::from(at.y) - i32::from(bar.y + 1);
-                self.apply_scroll_drag(lines, &g, row - d.grab);
-                true
-            }
-            MouseEventKind::Up(MouseButton::Left) => self.scroll_drag.take().is_some(),
-            _ => false,
-        }
-    }
-
-    fn apply_scroll_drag(&mut self, lines: usize, g: &ScrollGeometry, row: i32) {
-        let pos = g.position_at(row);
-        let offset = lines.saturating_sub(pos);
-        self.selection = None;
-        if let Some(tab) = self.tabs.get_mut(self.active) {
-            tab.session.scroll_to(offset);
-        }
-    }
-
-    fn bar_geometry(&mut self) -> Option<(ScrollGeometry, usize, usize)> {
-        let l = self.layout();
-        if l.bar.width == 0 || l.bar.height < 3 {
-            return None;
-        }
-        let tab = self.tabs.get(self.active)?;
-        let (h, offset) = {
-            let mut p = tab.session.parser().lock().ok()?;
-            let h = scrollback::history(p.screen_mut())?;
-            let offset = p.screen().scrollback();
-            (h, offset)
-        };
-        let g = ScrollGeometry {
-            track: l.bar.height.saturating_sub(2) as usize,
-            max: h.lines,
-            viewport: l.term.height as usize,
-        };
-        Some((g, h.lines.saturating_sub(offset), h.lines))
-    }
-
     fn mouse_dialog(&mut self, ev: &MouseEvent, at: Position) {
         if ev.kind != MouseEventKind::Down(MouseButton::Left) {
             return;
         }
-        let target = self.hit_test(at);
-        match target {
+        match self.hit_test(at) {
             HoverTarget::DialogRow(i) => {
                 if self.mode == Mode::TabPicker {
                     if let Some(p) = self.tab_picker.as_mut() {
@@ -1008,7 +911,7 @@ mod app_tests {
     fn the_first_tab_gets_the_pane_size_not_the_full_frame() {
         let a = app();
         assert_eq!(a.tabs.len(), 1);
-        assert_eq!(a.tabs[0].session.size(), (22, 79));
+        assert_eq!(a.tabs[0].session.size(), (23, 80));
     }
 
     #[test]
@@ -1081,11 +984,10 @@ mod app_tests {
     }
 
     #[test]
-    fn layout_reserves_one_row_of_status_and_one_column_of_scrollbar() {
+    fn layout_spends_only_the_tab_strip_on_chrome() {
         let a = app();
-        assert_eq!(a.layout().term, Rect::new(0, 1, 79, 22));
-        assert_eq!(a.layout().bar, Rect::new(79, 1, 1, 22));
-        assert_eq!(a.layout().status, Some(Rect::new(0, 23, 80, 1)));
+        assert_eq!(a.layout().header, Rect::new(0, 0, 80, 1));
+        assert_eq!(a.layout().term, Rect::new(0, 1, 80, 23));
     }
 
     #[test]
