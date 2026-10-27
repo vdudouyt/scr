@@ -16,8 +16,9 @@ until the daemon ends.
   bracketed paste, SGR/X10 mouse protocols.
 - Scrollback with the mouse wheel; no scrollbar chrome.
 - Session picker (`scr -r`) with keyboard and mouse.
-- Modern grayscale UI: gray text on a dark-gray canvas, inverted tab headers,
-  and borderless dialogs.
+- Modern grayscale UI: gray text on dark-gray chrome, inverted tab headers and
+  borderless dialogs. The terminal pane keeps the terminal's own colours and
+  background.
 - No async runtime, database, or network stack.
 
 ## Build
@@ -125,7 +126,8 @@ $
 The terminal gets every row below the tab strip and the full width. There is no
 status bar, no scrollbar column and no window frame border. Tab headers are
 inverted (gray background, dark text), and dialogs are borderless panels over
-the terminal.
+the terminal. The terminal pane itself leaves default colours to the terminal,
+so its background and transparency are untouched.
 
 ## Architecture
 

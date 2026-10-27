@@ -1,10 +1,9 @@
-//! The terminal pane and its default colours.
+//! The terminal pane. The pane keeps the terminal's own default colours.
 
 use crate::app::{App, Mode};
-use crate::ui::{Layout, theme};
+use crate::ui::Layout;
 use ratatui::Frame;
-use ratatui::layout::{Position, Rect};
-use ratatui::style::{Color, Style};
+use ratatui::layout::Position;
 use tui_term::widget::{Cursor, PseudoTerminal};
 
 pub fn render(f: &mut Frame, app: &mut App, l: Layout) {
@@ -27,17 +26,14 @@ pub fn render(f: &mut Frame, app: &mut App, l: Layout) {
         && !parser.screen().hide_cursor();
     let mut cursor = Cursor::default();
     cursor.hide();
-    // vt100 reports default colours as `Reset`, which would leave the canvas
-    // to the outer terminal's palette. Draw normally, then replace only those
-    // resets.
+    // No background style is applied to the widget: vt100 cells with default
+    // colours render as `Reset`, so the terminal's own background and
+    // foreground show through unchanged.
     f.render_widget(
-        PseudoTerminal::new(parser.screen())
-            .cursor(cursor)
-            .style(Style::new().bg(theme::BG_BASE).fg(theme::FG)),
+        PseudoTerminal::new(parser.screen()).cursor(cursor),
         l.term,
     );
     drop(parser);
-    apply_defaults(f, l.term);
     if show_cursor {
         let (row, col) = cursor_pos;
         if col < l.term.width && row < l.term.height {
@@ -46,20 +42,3 @@ pub fn render(f: &mut Frame, app: &mut App, l: Layout) {
     }
 }
 
-/// vt100 leaves default foreground/background as `Reset`; give the pane the
-/// grayscale canvas without touching colours a program chose itself.
-fn apply_defaults(f: &mut Frame, term: Rect) {
-    let buf = f.buffer_mut();
-    for row in 0..term.height {
-        for col in 0..term.width {
-            if let Some(cell) = buf.cell_mut(Position::new(term.x + col, term.y + row)) {
-                if cell.fg == Color::Reset {
-                    cell.fg = theme::FG;
-                }
-                if cell.bg == Color::Reset {
-                    cell.bg = theme::BG_BASE;
-                }
-            }
-        }
-    }
-}
