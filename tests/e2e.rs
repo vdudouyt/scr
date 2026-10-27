@@ -82,6 +82,7 @@ struct Ui {
     writer: Box<dyn Write + Send>,
     rx: Receiver<Vec<u8>>,
     parser: vt100::Parser,
+    raw: Vec<u8>,
 }
 
 impl Ui {
@@ -119,12 +120,14 @@ impl Ui {
             writer,
             rx,
             parser: vt100::Parser::new(24, 80, 2000),
+            raw: Vec::new(),
         }
     }
 
     fn pump(&mut self) {
         while let Ok(chunk) = self.rx.recv_timeout(Duration::from_millis(20)) {
             self.parser.process(&chunk);
+            self.raw.extend_from_slice(&chunk);
         }
     }
 
@@ -238,4 +241,34 @@ fn detach_reattach_tabs_and_kill_cleanup() {
     );
     assert!(!env2.dir.join(format!("{name2}.sock")).exists());
     assert!(!env2.dir.join(format!("{name2}.lock")).exists());
+}
+
+#[test]
+fn sigkill_restores_the_terminal_through_the_guardian() {
+    let env = Env::new("guard");
+    let name = env.name.clone();
+    let mut ui = Ui::spawn(&env, &["-S", &name]);
+    ui.wait_for("1:bash", 8);
+    let pid = ui.child.process_id().expect("client pid") as i32;
+    unsafe {
+        libc::kill(pid, libc::SIGKILL);
+    }
+    let deadline = Instant::now() + Duration::from_secs(5);
+    let marker = b"\x1b[?1049l";
+    while Instant::now() < deadline {
+        ui.pump();
+        if ui.raw.windows(marker.len()).any(|w| w == marker) {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    assert!(
+        ui.raw.windows(marker.len()).any(|w| w == marker),
+        "guardian never left the alternate screen"
+    );
+    assert!(
+        ui.raw.windows(8).any(|w| w == b"\x1b[?1003l"),
+        "guardian never disabled mouse reporting"
+    );
+    let _ = ui.child.wait();
 }

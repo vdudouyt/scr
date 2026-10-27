@@ -111,6 +111,12 @@ The daemon calls `setsid()` and ignores `SIGHUP`/`SIGPIPE`, so closing the
 attaching terminal does not end the session. One client can be attached at a
 time; `scr -d` detaches it.
 
+The client runs on the alternate screen. A tiny `scr-guard` process holds the
+original termios and restores the screen, mouse modes and cursor if the client
+dies without unwinding — including SIGKILL. `killall -9 scr` therefore removes
+all sessions and leaves the terminal back at the shell instead of showing the
+UI artifacts.
+
 ## Layout
 
 One row of chrome only:
@@ -138,6 +144,8 @@ at their default colours do not get a blue wash.
 - `src/app.rs` — tabs, prefix state machine, mouse routing, selection, dialogs.
 - `src/ui/` — Turbo Vision theme, tab strip, pane, dialogs.
 - `src/picker.rs` — `scr -r` session picker.
+- `src/terminal.rs` — raw mode, alternate screen and the `scr-guard` restore
+  helper.
 - `src/session.rs` — runtime directory, locks, discovery, daemon spawning.
 
 Session output is parsed by `vt100` in the daemon. The daemon renders with
@@ -153,6 +161,8 @@ cargo test
 
 Unit coverage includes key/mouse encoders, scrollback, the tab/prefix state
 machine, geometry, OSC 52 base64, session locking and the backend wrapper. The
+end-to-end tests also verify that SIGKILL leaves the alternate screen and mouse
+modes restored. The
 end-to-end test runs a real client on a PTY against a real daemon: it opens tabs,
 switches with Alt+1, detaches, reattaches, closes tabs, ends a session, and
 verifies that a `SIGKILL`ed daemon disappears from the listing and removes its
