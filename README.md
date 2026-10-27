@@ -155,9 +155,9 @@ Session output is parsed by `vt100` in the daemon. The daemon renders with
 interprets screen contents, so detach/reattach and multiple tabs stay
 consistent.
 
-Terminal modes, alternate-screen transitions, mouse/paste/focus reporting and
-clipboard copies all come from crossterm; the daemon's ANSI output is
-`CrosstermBackend`'s. The remaining `libc` calls are process-level only: `setsid`
+Raw mode and the alternate screen use `ratatui::try_init()` / `try_restore()`,
+the same pair OpenAdmin uses; mouse/paste/focus reporting and clipboard copies
+come from crossterm, and the daemon's ANSI output is `CrosstermBackend`'s. The remaining `libc` calls are process-level only: `setsid`
 for the daemon and the fork/pipe/signal plumbing that lets `scr-guard` restore
 the terminal after SIGKILL.
 

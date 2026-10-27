@@ -12,9 +12,6 @@ use ratatui::crossterm::event::{
     EnableFocusChange, EnableMouseCapture,
 };
 use ratatui::crossterm::style::{Attribute, ResetColor, SetAttribute};
-use ratatui::crossterm::terminal::{
-    EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
-};
 use ratatui::crossterm::{cursor, execute};
 use std::io::{self, Write};
 use std::sync::atomic::{AtomicI32, Ordering};
@@ -23,17 +20,22 @@ static GUARD_FD: AtomicI32 = AtomicI32::new(-1);
 
 pub fn enter() -> Result<()> {
     install_signal_handlers();
-    enable_raw_mode()?;
+    // The same setup OpenAdmin uses: raw mode plus the alternate screen,
+    // with ratatui's standard panic hook. Mouse, paste and focus capture are
+    // separate crossterm commands, also as in OpenAdmin.
+    if let Err(e) = ratatui::try_init() {
+        let _ = ratatui::try_restore();
+        return Err(e.into());
+    }
     let mut out = io::stdout();
     if let Err(e) = execute!(
         out,
-        EnterAlternateScreen,
         EnableMouseCapture,
         EnableBracketedPaste,
         EnableFocusChange,
         cursor::Hide
     ) {
-        let _ = disable_raw_mode();
+        let _ = restore_terminal();
         return Err(e.into());
     }
     if !spawn_guardian() {
@@ -60,20 +62,19 @@ pub fn install_panic_hook() {
 
 fn restore_terminal() -> bool {
     let mut out = io::stdout();
-    let executed = execute!(
+    let commands = execute!(
         out,
         DisableMouseCapture,
         DisableBracketedPaste,
         DisableFocusChange,
-        LeaveAlternateScreen,
         ResetColor,
         SetAttribute(Attribute::Reset),
         cursor::Show
     )
     .is_ok();
-    let raw = disable_raw_mode().is_ok();
     let _ = out.flush();
-    executed && raw
+    let screen = ratatui::try_restore().is_ok();
+    commands && screen
 }
 
 fn notify_guardian(byte: u8) {
