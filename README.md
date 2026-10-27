@@ -15,10 +15,8 @@ until the daemon ends.
 - Full xterm key and mouse encoding: DECCKM arrows, modified keys, F1–F12,
   bracketed paste, SGR/X10 mouse protocols.
 - Scrollback with the mouse wheel; no scrollbar chrome.
-- Drag-select text and copy it with crossterm's OSC 52 command. `Shift`+drag
-  selects even when the running program has grabbed the mouse.
 - Session picker (`scr -r`) with keyboard and mouse.
-- Turbo Vision chrome: blue desktop, gray panels, cyan selection, red
+- Turbo Vision chrome: blue desktop, gray panels, cyan active tab, red
   hotkeys, double-line dialogs with drop shadows. The terminal canvas itself
   stays black so tools that rely on a dark background remain readable.
 - No async runtime, database, or network stack.
@@ -32,9 +30,8 @@ install -m755 target/release/scr ~/.local/bin/scr
 
 The project uses the same ratatui/tui-term/portable-pty/vt100 versions as the
 OpenAdmin terminal stack (`ratatui 0.30.2`, `tui-term 0.3.4`, `vt100 0.16.2`,
-`portable-pty 0.9.0`, `crossterm 0.29.0`). `crossterm` is already a transitive
-dependency of ratatui in OpenAdmin; the direct entry only enables its optional
-OSC 52 clipboard command. Clipboard writes use that command.
+`portable-pty 0.9.0`). Terminal control and rendering use ratatui's crossterm
+re-export, exactly as OpenAdmin does.
 
 ## Usage
 
@@ -79,11 +76,7 @@ reach the child.
 - Hover highlights the element under the pointer.
 - The wheel scrolls the terminal back; typing or pasting returns to the prompt.
 - A program that enabled mouse reporting receives correctly encoded events.
-  `Shift`+drag keeps selection for you.
 - Dialogs are fully mouse-usable.
-
-Selection copies on release using OSC 52. The terminal must allow OSC 52
-clipboard writes for the copy to reach the system clipboard.
 
 ## Sessions and cleanup
 
@@ -143,7 +136,7 @@ at their default colours do not get a blue wash.
   uses) wrapped around a socket buffer, with the size and cursor position
   supplied by the attached client.
 - `src/term/` — PTY sessions, xterm key/mouse encoders, scrollback rules.
-- `src/app.rs` — tabs, prefix state machine, mouse routing, selection, dialogs.
+- `src/app.rs` — tabs, prefix state machine, mouse routing, dialogs.
 - `src/ui/` — Turbo Vision theme, tab strip, pane, dialogs.
 - `src/picker.rs` — `scr -r` session picker.
 - `src/terminal.rs` — raw mode, alternate screen and the `scr-guard` restore
@@ -156,8 +149,8 @@ interprets screen contents, so detach/reattach and multiple tabs stay
 consistent.
 
 Raw mode and the alternate screen use `ratatui::try_init()` / `try_restore()`,
-the same pair OpenAdmin uses; mouse/paste/focus reporting and clipboard copies
-come from crossterm, and the daemon's ANSI output is `CrosstermBackend`'s. The remaining `libc` calls are process-level only: `setsid`
+the same pair OpenAdmin uses; mouse/paste/focus reporting comes from crossterm,
+and the daemon's ANSI output is `CrosstermBackend`'s. The remaining `libc` calls are process-level only: `setsid`
 for the daemon and the fork/pipe/signal plumbing that lets `scr-guard` restore
 the terminal after SIGKILL.
 
@@ -168,10 +161,9 @@ cargo test
 ```
 
 Unit coverage includes key/mouse encoders, scrollback, the tab/prefix state
-machine, geometry, OSC 52 base64, session locking and the backend wrapper. The
-end-to-end tests also verify that SIGKILL leaves the alternate screen and mouse
-modes restored. The
-end-to-end test runs a real client on a PTY against a real daemon: it opens tabs,
-switches with Alt+1, detaches, reattaches, closes tabs, ends a session, and
-verifies that a `SIGKILL`ed daemon disappears from the listing and removes its
-socket and lock.
+machine, geometry, session locking and the backend wrapper. The end-to-end test
+runs a real client on a PTY against a real daemon: it opens tabs, switches with
+Alt+1, detaches, reattaches, closes tabs, ends a session, and verifies that a
+`SIGKILL`ed daemon disappears from the listing and removes its socket and lock.
+A second end-to-end test verifies that SIGKILL leaves the alternate screen and
+mouse modes restored.

@@ -211,12 +211,6 @@ fn event_loop(app: &mut App, rx: Receiver<Event>, event_tx: Sender<Event>) -> Re
                     ClientMsg::Detach => app.detach_requested = true,
                     ClientMsg::Probe | ClientMsg::Attach { .. } => {}
                 }
-                let out = app.take_outbox();
-                if !out.is_empty() {
-                    if let Some(c) = client.as_mut() {
-                        let _ = proto::write_frame(&mut c.stream, TAG_ANSI, &out);
-                    }
-                }
                 if redraw {
                     dirty = true;
                 }

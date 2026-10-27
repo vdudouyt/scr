@@ -6,11 +6,9 @@ use crate::term::keys;
 use crate::term::session::{SessionId, Spawn, TermEvent, TerminalSession};
 use crate::ui;
 use anyhow::{Context, Result};
-use ratatui::crossterm::clipboard::CopyToClipboard;
 use ratatui::crossterm::event::{
     KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
 };
-use ratatui::crossterm::queue;
 use ratatui::layout::{Position, Rect};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::Sender;
@@ -64,27 +62,6 @@ impl Regions {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Selection {
-    pub start: (u16, u16),
-    pub end: (u16, u16),
-    pub dragging: bool,
-}
-
-impl Selection {
-    pub fn normalized(self) -> ((u16, u16), (u16, u16)) {
-        if self.start <= self.end {
-            (self.start, self.end)
-        } else {
-            (self.end, self.start)
-        }
-    }
-
-    pub fn is_empty(self) -> bool {
-        self.start == self.end
-    }
-}
-
 pub struct Tab {
     pub id: SessionId,
     pub title: String,
@@ -110,7 +87,6 @@ pub struct App {
     pub tab_picker: Option<TabPickerState>,
     pub hover: HoverTarget,
     pub regions: Regions,
-    pub selection: Option<Selection>,
     pub flash: Option<(String, Instant)>,
     pub size: (u16, u16),
     pub should_quit: bool,
@@ -118,9 +94,6 @@ pub struct App {
     scrollback: usize,
     term: String,
     term_tx: Sender<TermEvent>,
-    /// Immediate control bytes (currently OSC 52 clipboard writes) the server
-    /// should hand to the attached client before its next rendered frame.
-    pub outbox: Vec<u8>,
 }
 
 impl App {
@@ -152,7 +125,6 @@ impl App {
             tab_picker: None,
             hover: HoverTarget::None,
             regions: Regions::default(),
-            selection: None,
             flash: None,
             size,
             should_quit: false,
@@ -160,7 +132,6 @@ impl App {
             scrollback,
             term,
             term_tx,
-            outbox: Vec::new(),
         };
         let first = if app.initial.is_empty() {
             None
@@ -191,7 +162,6 @@ impl App {
         for tab in &mut self.tabs {
             let _ = tab.session.resize((h, w));
         }
-        self.selection = None;
     }
 
     pub fn active_tab(&self) -> Option<&Tab> {
@@ -223,7 +193,6 @@ impl App {
             session,
         });
         self.active = self.tabs.len() - 1;
-        self.selection = None;
         self.hover = HoverTarget::None;
         Ok(())
     }
@@ -258,7 +227,6 @@ impl App {
         } else if index < self.active {
             self.active -= 1;
         }
-        self.selection = None;
         self.hover = HoverTarget::None;
     }
 
@@ -272,7 +240,6 @@ impl App {
     pub fn select_tab(&mut self, index: usize) {
         if index < self.tabs.len() {
             self.active = index;
-            self.selection = None;
             self.prefix = false;
         }
     }
@@ -325,7 +292,6 @@ impl App {
     pub fn on_attach(&mut self) {
         self.prefix = false;
         self.hover = HoverTarget::None;
-        self.selection = None;
     }
 
     pub fn info(&self, attached: bool) -> SessionInfo {
@@ -459,7 +425,6 @@ impl App {
         if bytes.is_empty() {
             return;
         }
-        self.selection = None;
         if let Some(tab) = self.tabs.get_mut(self.active) {
             if !tab.session.has_exited() {
                 tab.session.scroll_to_live();
@@ -610,9 +575,7 @@ impl App {
                 }
             }
             HoverTarget::Pane => {
-                if !self.pane_wants_mouse() || mods.contains(KeyModifiers::SHIFT) {
-                    self.start_selection(at);
-                } else {
+                if self.pane_wants_mouse() {
                     let ev = MouseEvent {
                         kind: MouseEventKind::Down(MouseButton::Left),
                         column: at.x,
@@ -627,21 +590,7 @@ impl App {
     }
 
     fn release_left(&mut self, at: Position, mods: KeyModifiers) {
-        if let Some(sel) = self.selection.as_mut() {
-            if sel.dragging {
-                sel.dragging = false;
-                if !sel.is_empty() {
-                    self.copy_selection();
-                } else {
-                    self.selection = None;
-                }
-                return;
-            }
-        }
-        if self.hover == HoverTarget::Pane
-            && self.pane_wants_mouse()
-            && !mods.contains(KeyModifiers::SHIFT)
-        {
+        if self.hover == HoverTarget::Pane && self.pane_wants_mouse() {
             let ev = MouseEvent {
                 kind: MouseEventKind::Up(MouseButton::Left),
                 column: at.x,
@@ -653,16 +602,6 @@ impl App {
     }
 
     fn drag_left(&mut self, at: Position, mods: KeyModifiers) {
-        if let Some(sel) = self.selection.as_mut()
-            && sel.dragging
-        {
-            let Some(pane) = self.regions.pane else {
-                return;
-            };
-            let (x, y) = clamp_to_pane(at, pane);
-            sel.end = (y, x);
-            return;
-        }
         if self.hover == HoverTarget::Pane && self.pane_wants_mouse() {
             let ev = MouseEvent {
                 kind: MouseEventKind::Drag(MouseButton::Left),
@@ -672,50 +611,6 @@ impl App {
             };
             self.forward_pane_mouse(&ev, at);
         }
-    }
-
-    fn start_selection(&mut self, at: Position) {
-        let Some(pane) = self.regions.pane else {
-            return;
-        };
-        let (x, y) = clamp_to_pane(at, pane);
-        self.selection = Some(Selection {
-            start: (y, x),
-            end: (y, x),
-            dragging: true,
-        });
-    }
-
-    fn copy_selection(&mut self) {
-        let Some(sel) = self.selection else {
-            return;
-        };
-        let ((sr, sc), (er, ec)) = sel.normalized();
-        let Some(tab) = self.tabs.get(self.active) else {
-            return;
-        };
-        let text = match tab.session.parser().lock() {
-            Ok(p) => p.screen().contents_between(sr, sc, er, ec),
-            Err(_) => return,
-        };
-        let text = text
-            .lines()
-            .map(|l| l.trim_end())
-            .collect::<Vec<_>>()
-            .join("\n");
-        let text = text.trim_end_matches('\n').to_string();
-        if text.is_empty() {
-            self.flash("Nothing selected");
-            return;
-        }
-        let count = text.chars().count();
-        let mut bytes = Vec::new();
-        if queue!(bytes, CopyToClipboard::to_clipboard_from(text)).is_err() {
-            self.flash("Could not copy selection");
-            return;
-        }
-        self.outbox.extend_from_slice(&bytes);
-        self.flash(format!("Copied {count} chars"));
     }
 
     fn wheel(&mut self, lines: isize, at: Position) {
@@ -739,7 +634,6 @@ impl App {
             self.forward_pane_mouse(&ev, at);
             return;
         }
-        self.selection = None;
         if let Some(tab) = self.tabs.get_mut(self.active) {
             // Up the screen is back in time; `scroll_history` takes positive
             // values as backward.
@@ -813,44 +707,10 @@ impl App {
             _ => {}
         }
     }
-
-    // ---- server-facing ---------------------------------------------------
-
-    pub fn take_outbox(&mut self) -> Vec<u8> {
-        std::mem::take(&mut self.outbox)
-    }
-}
-
-fn clamp_to_pane(at: Position, pane: Rect) -> (u16, u16) {
-    let x = at
-        .x
-        .saturating_sub(pane.x)
-        .min(pane.width.saturating_sub(1));
-    let y = at
-        .y
-        .saturating_sub(pane.y)
-        .min(pane.height.saturating_sub(1));
-    (x, y)
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
-    #[test]
-    fn selection_is_normalized() {
-        let s = Selection {
-            start: (4, 5),
-            end: (1, 2),
-            dragging: false,
-        };
-        assert_eq!(s.normalized(), ((1, 2), (4, 5)));
-        assert!(!s.is_empty());
-    }
-}
-
-#[cfg(test)]
-mod app_tests {
     use super::*;
     use std::sync::mpsc::channel;
 
@@ -927,25 +787,6 @@ mod app_tests {
         assert_eq!(a.active, 0);
         a.on_key(KeyEvent::new(KeyCode::Right, KeyModifiers::ALT));
         assert_eq!(a.active, 1);
-    }
-
-    #[test]
-    fn copy_selection_sends_an_osc52_sequence() {
-        let mut a = app();
-        {
-            let s = &a.tabs[0].session;
-            let mut p = s.parser().lock().unwrap();
-            p.process(b"hello world\r\n");
-        }
-        a.selection = Some(Selection {
-            start: (0, 0),
-            end: (0, 5),
-            dragging: false,
-        });
-        a.copy_selection();
-        let out = String::from_utf8_lossy(&a.outbox);
-        assert!(out.starts_with("\x1b]52;c;"));
-        assert!(out.contains("aGVsbG8=") || out.contains("aGVsbG8"));
     }
 
     #[test]

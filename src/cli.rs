@@ -34,8 +34,7 @@ KEYS:
     Alt+← / →     next / previous    Alt+1…9       jump to tab
     Ctrl+A A      literal Ctrl+A     Ctrl+A ?      help
 
-Mouse: click tabs, + and ×; wheel scrolls; drag selects text (OSC 52 copy).
-Shift+drag selects even when the running program has grabbed the mouse.
+Mouse: click tabs, + and ×; wheel scrolls the terminal history.
 ";
 
 pub fn parse(args: Vec<String>) -> Result<Command> {

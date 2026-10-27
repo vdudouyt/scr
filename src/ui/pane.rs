@@ -1,6 +1,6 @@
-//! The terminal pane, its default colours, and the mouse-selection overlay.
+//! The terminal pane and its default colours.
 
-use crate::app::{App, Mode, Selection};
+use crate::app::{App, Mode};
 use crate::ui::{Layout, theme};
 use ratatui::Frame;
 use ratatui::layout::{Position, Rect};
@@ -44,10 +44,6 @@ pub fn render(f: &mut Frame, app: &mut App, l: Layout) {
             f.set_cursor_position(Position::new(l.term.x + col, l.term.y + row));
         }
     }
-
-    if let Some(sel) = app.selection {
-        paint_selection(f, l.term, sel);
-    }
 }
 
 /// vt100 leaves default foreground/background as `Reset`; give the pane the
@@ -63,29 +59,6 @@ fn apply_defaults(f: &mut Frame, term: Rect) {
                 if cell.bg == Color::Reset {
                     cell.bg = theme::BLACK;
                 }
-            }
-        }
-    }
-}
-
-fn paint_selection(f: &mut Frame, term: Rect, sel: Selection) {
-    if sel.is_empty() {
-        return;
-    }
-    let ((sr, sc), (er, ec)) = sel.normalized();
-    let buf = f.buffer_mut();
-    for row in sr..=er {
-        if row >= term.height {
-            break;
-        }
-        let c0 = if row == sr { sc } else { 0 };
-        let c1 = if row == er { ec } else { term.width.saturating_sub(1) };
-        for col in c0..=c1 {
-            if col >= term.width {
-                break;
-            }
-            if let Some(cell) = buf.cell_mut(Position::new(term.x + col, term.y + row)) {
-                cell.set_style(theme::selection());
             }
         }
     }

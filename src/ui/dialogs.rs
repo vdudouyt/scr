@@ -159,7 +159,6 @@ pub fn help(f: &mut Frame, screen: Rect, app: &mut App) {
         ("Alt+1…9", "Jump to a tab"),
         ("Ctrl+A A", "Send a literal Ctrl+A"),
         ("Mouse", "Click tabs, +, ×; wheel scrolls"),
-        ("Shift+drag", "Select text; OSC 52 copy"),
     ];
     for (i, (key, text)) in rows.iter().enumerate() {
         if i as u16 >= inside.height.saturating_sub(2) {

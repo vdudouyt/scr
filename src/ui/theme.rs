@@ -141,9 +141,7 @@ pub fn button_hotkey() -> Style {
         .fg(RED)
         .add_modifier(Modifier::BOLD)
 }
-pub fn selection() -> Style {
-    Style::new().bg(CYAN).fg(BLACK)
-}
+
 pub fn scroll_track() -> Style {
     Style::new().bg(BLACK).fg(DARK)
 }
