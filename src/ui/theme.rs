@@ -39,22 +39,22 @@ pub fn faint() -> Style {
 }
 
 /// Idle tabs sit on the bar's own background with no block of their own. The
-/// active tab is a subtle raised panel, and hover is one step brighter.
+/// active tab is a subtle raised panel, and hover is a step brighter.
 pub fn tab_idle() -> Style {
     Style::new().bg(BG_BASE).fg(FG_MUTED)
 }
 pub fn tab_active() -> Style {
-    Style::new().bg(BG_SEL).fg(FG_BRIGHT)
+    Style::new().bg(BG_HOVER).fg(FG_BRIGHT)
 }
 pub fn tab_hover() -> Style {
     Style::new()
-        .bg(BG_HOVER)
+        .bg(BG_SEL)
         .fg(FG_BRIGHT)
         .add_modifier(Modifier::UNDERLINED)
 }
 pub fn tab_active_hover() -> Style {
     Style::new()
-        .bg(BG_HOVER)
+        .bg(BG_SEL)
         .fg(WHITE)
         .add_modifier(Modifier::UNDERLINED)
 }
