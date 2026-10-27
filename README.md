@@ -15,8 +15,8 @@ until the daemon ends.
 - Full xterm key and mouse encoding: DECCKM arrows, modified keys, F1–F12,
   bracketed paste, SGR/X10 mouse protocols.
 - Scrollback with the mouse wheel; no scrollbar chrome.
-- Drag-select text and copy it with OSC 52. `Shift`+drag selects even when the
-  running program has grabbed the mouse.
+- Drag-select text and copy it with crossterm's OSC 52 command. `Shift`+drag
+  selects even when the running program has grabbed the mouse.
 - Session picker (`scr -r`) with keyboard and mouse.
 - Turbo Vision chrome: blue desktop, gray panels, cyan selection, red
   hotkeys, double-line dialogs with drop shadows. The terminal canvas itself
@@ -32,7 +32,8 @@ install -m755 target/release/scr ~/.local/bin/scr
 
 The project uses the same ratatui/tui-term/portable-pty/vt100 versions as the
 OpenAdmin terminal stack (`ratatui 0.30.2`, `tui-term 0.3.4`, `vt100 0.16.2`,
-`portable-pty 0.9.0`).
+`portable-pty 0.9.0`, `crossterm 0.29.0`). Clipboard writes use crossterm's
+OSC 52 command.
 
 ## Usage
 
@@ -88,7 +89,7 @@ clipboard writes for the copy to reach the system clipboard.
 State lives in:
 
 ```text
-$XDG_RUNTIME_DIR/scr/     (fallback: /tmp/scr-$UID)
+$XDG_RUNTIME_DIR/scr/     (fallback: ~/.scr, then /tmp/scr)
   <name>.sock
   <name>.lock
   <name>.log
@@ -151,7 +152,13 @@ at their default colours do not get a blue wash.
 Session output is parsed by `vt100` in the daemon. The daemon renders with
 `ratatui` through `CrosstermBackend` into the socket; the client never
 interprets screen contents, so detach/reattach and multiple tabs stay
-consistent. The only custom part is the sink and the client-supplied size.
+consistent.
+
+Terminal modes, alternate-screen transitions, mouse/paste/focus reporting and
+clipboard copies all come from crossterm; the daemon's ANSI output is
+`CrosstermBackend`'s. The remaining `libc` calls are process-level only: `setsid`
+for the daemon and the fork/pipe/signal plumbing that lets `scr-guard` restore
+the terminal after SIGKILL.
 
 ## Tests
 

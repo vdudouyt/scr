@@ -10,6 +10,9 @@ use crate::term::session::TermEvent;
 use crate::ui;
 use anyhow::{Context, Result};
 use ratatui::Terminal;
+use ratatui::crossterm::cursor::MoveTo;
+use ratatui::crossterm::queue;
+use ratatui::crossterm::terminal::{Clear, ClearType};
 use ratatui::layout::Rect;
 use std::io::Write;
 use std::os::unix::fs::PermissionsExt;
@@ -33,10 +36,10 @@ struct Client {
 
 pub fn run(name: String, initial: Vec<String>) -> Result<()> {
     session::validate_name(&name)?;
+    // A new session has no controlling terminal, so closing the attached
+    // client's terminal cannot SIGHUP the daemon. Rust itself ignores SIGPIPE.
     unsafe {
         libc::setsid();
-        libc::signal(libc::SIGHUP, libc::SIG_IGN);
-        libc::signal(libc::SIGPIPE, libc::SIG_IGN);
     }
 
     let lock = session::acquire_lock(&name)?;
@@ -316,7 +319,9 @@ fn handle_conn(
                 return;
             };
             spawn_client_reader(reader, generation, event_tx);
-            let _ = proto::write_frame(&mut stream, TAG_ANSI, b"\x1b[2J\x1b[H");
+            let mut clear = Vec::new();
+            let _ = queue!(clear, Clear(ClearType::All), MoveTo(0, 0));
+            let _ = proto::write_frame(&mut stream, TAG_ANSI, &clear);
             *client = Some(Client {
                 stream,
                 generation,

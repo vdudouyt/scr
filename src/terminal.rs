@@ -1,31 +1,28 @@
 //! Raw-terminal setup shared by attaching clients and the session picker.
 //!
-//! Detaching restores the terminal through the normal path. A `SIGKILL` cannot
-//! run a handler, so every client also leaves a tiny guardian process holding
-//! the original termios and a pipe. If the client dies without calling
-//! `leave`, the guardian restores the terminal itself.
+//! All terminal modes and escape sequences come from crossterm, re-exported by
+//! ratatui. Normal detach leaves the alternate screen and restores raw mode
+//! through crossterm. A `SIGKILL` cannot run a handler, so each client also
+//! leaves a tiny `scr-guard` process holding a pipe; if the client dies without
+//! a clean leave, the guardian runs the same crossterm restore itself.
 
 use anyhow::Result;
 use ratatui::crossterm::event::{
     DisableBracketedPaste, DisableFocusChange, DisableMouseCapture, EnableBracketedPaste,
     EnableFocusChange, EnableMouseCapture,
 };
+use ratatui::crossterm::style::{Attribute, ResetColor, SetAttribute};
 use ratatui::crossterm::terminal::{
     EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
 };
 use ratatui::crossterm::{cursor, execute};
 use std::io::{self, Write};
-use std::sync::atomic::{AtomicI32, AtomicPtr, Ordering};
-
-const RESTORE: &[u8] = b"\x1b[?1003l\x1b[?1002l\x1b[?1000l\x1b[?1015l\x1b[?1006l\x1b[?2004l\x1b[?1004l\x1b[?1049l\x1b[0m\x1b[?25h";
+use std::sync::atomic::{AtomicI32, Ordering};
 
 static GUARD_FD: AtomicI32 = AtomicI32::new(-1);
-static ORIG_TERMIOS: AtomicPtr<libc::termios> = AtomicPtr::new(std::ptr::null_mut());
 
 pub fn enter() -> Result<()> {
-    let original = remember_termios();
     install_signal_handlers();
-
     enable_raw_mode()?;
     let mut out = io::stdout();
     if let Err(e) = execute!(
@@ -39,39 +36,18 @@ pub fn enter() -> Result<()> {
         let _ = disable_raw_mode();
         return Err(e.into());
     }
-    if out.write_all(b"\x1b[?1003h").and_then(|_| out.flush()).is_err() {
-        let _ = disable_raw_mode();
-        return Err(anyhow::anyhow!("enable all-motion mouse reporting"));
+    if !spawn_guardian() {
+        leave();
+        return Err(anyhow::anyhow!("could not start the terminal guardian"));
     }
-    spawn_guardian(original);
     Ok(())
 }
 
 pub fn leave() {
-    let mut out = io::stdout();
-    let _ = execute!(
-        out,
-        DisableMouseCapture,
-        DisableBracketedPaste,
-        DisableFocusChange,
-        LeaveAlternateScreen,
-        cursor::Show
-    );
-    let _ = out.write_all(b"\x1b[?1003l\x1b[0m\x1b[?25h");
-    let _ = out.flush();
-    let _ = disable_raw_mode();
-
-    notify_guardian();
-}
-
-fn notify_guardian() {
-    let fd = GUARD_FD.swap(-1, Ordering::SeqCst);
-    if fd >= 0 {
-        unsafe {
-            let _ = libc::write(fd, b"0".as_ptr() as *const libc::c_void, 1);
-            libc::close(fd);
-        }
-    }
+    let restored = restore_terminal();
+    // `0` means the client restored the terminal itself. `R` asks the
+    // guardian to do it; EOF (SIGKILL) means the same thing.
+    notify_guardian(if restored { b'0' } else { b'R' });
 }
 
 pub fn install_panic_hook() {
@@ -82,20 +58,31 @@ pub fn install_panic_hook() {
     }));
 }
 
-fn remember_termios() -> Option<libc::termios> {
-    unsafe {
-        let mut term: libc::termios = std::mem::zeroed();
-        if libc::tcgetattr(0, &mut term) != 0 {
-            return None;
+fn restore_terminal() -> bool {
+    let mut out = io::stdout();
+    let executed = execute!(
+        out,
+        DisableMouseCapture,
+        DisableBracketedPaste,
+        DisableFocusChange,
+        LeaveAlternateScreen,
+        ResetColor,
+        SetAttribute(Attribute::Reset),
+        cursor::Show
+    )
+    .is_ok();
+    let raw = disable_raw_mode().is_ok();
+    let _ = out.flush();
+    executed && raw
+}
+
+fn notify_guardian(byte: u8) {
+    let fd = GUARD_FD.swap(-1, Ordering::SeqCst);
+    if fd >= 0 {
+        unsafe {
+            let _ = libc::write(fd, &byte as *const u8 as *const libc::c_void, 1);
+            libc::close(fd);
         }
-        let copy = term;
-        let ptr = Box::into_raw(Box::new(term));
-        // A second enter (picker, then attach) replaces the saved state.
-        let old = ORIG_TERMIOS.swap(ptr, Ordering::SeqCst);
-        if !old.is_null() {
-            drop(Box::from_raw(old));
-        }
-        Some(copy)
     }
 }
 
@@ -107,50 +94,44 @@ fn install_signal_handlers() {
             libc::SIGINT,
             libc::SIGQUIT,
         ] {
-            libc::signal(sig, handle_signal as *const () as libc::sighandler_t);
+            libc::signal(
+                sig,
+                handle_signal as *const () as libc::sighandler_t,
+            );
         }
         libc::signal(libc::SIGPIPE, libc::SIG_IGN);
     }
 }
 
 extern "C" fn handle_signal(sig: libc::c_int) {
-    notify_guardian();
+    // The signal handler does no terminal work: it hands restoration to the
+    // guardian (normal Rust code, not an async signal context) and exits.
     unsafe {
-        restore_now();
+        let fd = GUARD_FD.swap(-1, Ordering::SeqCst);
+        if fd >= 0 {
+            let _ = libc::write(fd, b"R".as_ptr() as *const libc::c_void, 1);
+            libc::close(fd);
+        }
         libc::_exit(128 + sig);
     }
 }
 
-unsafe fn restore_now() {
-    unsafe {
-        let _ = libc::write(
-            1,
-            RESTORE.as_ptr() as *const libc::c_void,
-            RESTORE.len(),
-        );
-        let ptr = ORIG_TERMIOS.load(Ordering::SeqCst);
-        if !ptr.is_null() {
-            let _ = libc::tcsetattr(0, libc::TCSANOW, ptr);
-        }
-    }
-}
-
-/// Fork the small process that owns the terminal restore path for SIGKILL.
+/// Fork the small process that owns restoration after SIGKILL.
 ///
 /// It is renamed to `scr-guard` so `killall scr` does not take it down with
-/// the client and daemon. A normal `leave` sends one byte; the guardian then
-/// exits without touching the terminal.
-fn spawn_guardian(original: Option<libc::termios>) {
+/// the client and daemons. A clean leave sends `0`; the guardian then exits
+/// without touching the terminal.
+fn spawn_guardian() -> bool {
     unsafe {
         let mut fds = [0i32; 2];
         if libc::pipe(fds.as_mut_ptr()) != 0 {
-            return;
+            return false;
         }
         let pid = libc::fork();
         if pid < 0 {
             libc::close(fds[0]);
             libc::close(fds[1]);
-            return;
+            return false;
         }
         if pid == 0 {
             libc::close(fds[1]);
@@ -171,32 +152,29 @@ fn spawn_guardian(original: Option<libc::termios>) {
             ] {
                 libc::signal(sig, libc::SIG_IGN);
             }
+            let mut byte = 0u8;
             loop {
-                let mut byte = 0u8;
                 let n = libc::read(
                     fds[0],
                     &mut byte as *mut u8 as *mut libc::c_void,
                     1,
                 );
                 if n == 1 {
-                    libc::_exit(0);
+                    if byte == b'0' {
+                        libc::_exit(0);
+                    }
+                    break;
                 }
                 if n == 0 {
                     break;
                 }
-                if *libc::__errno_location() != libc::EINTR {
+                if std::io::Error::last_os_error().kind()
+                    != std::io::ErrorKind::Interrupted
+                {
                     break;
                 }
             }
-            // Parent died without a clean leave.
-            let _ = libc::write(
-                1,
-                RESTORE.as_ptr() as *const libc::c_void,
-                RESTORE.len(),
-            );
-            if let Some(term) = &original {
-                let _ = libc::tcsetattr(0, libc::TCSANOW, term);
-            }
+            let _ = restore_terminal();
             libc::_exit(0);
         }
         libc::close(fds[0]);
@@ -205,5 +183,6 @@ fn spawn_guardian(original: Option<libc::termios>) {
             let _ = libc::write(old, b"0".as_ptr() as *const libc::c_void, 1);
             libc::close(old);
         }
+        true
     }
 }

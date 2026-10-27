@@ -9,7 +9,6 @@ use anyhow::{Context, Result, bail};
 use std::collections::BTreeSet;
 use std::fs::{self, File, OpenOptions};
 use std::io::Write;
-use std::os::fd::AsRawFd;
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
@@ -25,19 +24,19 @@ impl Drop for SessionLock {
         // Leave the lock file in place. Removing it after unlocking opens a
         // race where two new daemons can each believe they hold it; a stale
         // file is harmless and `list_sessions` prunes it.
-        unsafe {
-            libc::flock(self.file.as_raw_fd(), libc::LOCK_UN);
-        }
+        let _ = self.file.unlock();
     }
 }
 
 pub fn runtime_dir() -> Result<PathBuf> {
     let dir = if let Some(d) = std::env::var_os("SCR_RUNTIME_DIR") {
         PathBuf::from(d)
-    } else if let Some(d) = std::env::var_os("XDG_RUNTIME_DIR") {
-        PathBuf::from(d).join("scr")
+    } else if let Some(d) = dirs::runtime_dir() {
+        d.join("scr")
+    } else if let Some(home) = dirs::home_dir() {
+        home.join(".scr")
     } else {
-        PathBuf::from(format!("/tmp/scr-{}", unsafe { libc::geteuid() }))
+        std::env::temp_dir().join("scr")
     };
     fs::create_dir_all(&dir).with_context(|| format!("create {}", dir.display()))?;
     let _ = fs::set_permissions(&dir, fs::Permissions::from_mode(0o700));
@@ -81,10 +80,8 @@ pub fn acquire_lock(name: &str) -> Result<SessionLock> {
         .mode(0o600)
         .open(&path)
         .with_context(|| format!("open {}", path.display()))?;
-    let rc = unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) };
-    if rc != 0 {
-        bail!("session {name} is already running");
-    }
+    file.try_lock()
+        .map_err(|_| anyhow::anyhow!("session {name} is already running"))?;
     Ok(SessionLock { file })
 }
 
@@ -92,14 +89,12 @@ fn lock_held(path: &Path) -> bool {
     let Ok(file) = OpenOptions::new().read(true).write(true).open(path) else {
         return false;
     };
-    let rc = unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) };
-    if rc == 0 {
-        unsafe {
-            libc::flock(file.as_raw_fd(), libc::LOCK_UN);
+    match file.try_lock() {
+        Ok(()) => {
+            let _ = file.unlock();
+            false
         }
-        false
-    } else {
-        true
+        Err(_) => true,
     }
 }
 

@@ -6,9 +6,11 @@ use crate::term::keys;
 use crate::term::session::{SessionId, Spawn, TermEvent, TerminalSession};
 use crate::ui;
 use anyhow::{Context, Result};
+use ratatui::crossterm::clipboard::CopyToClipboard;
 use ratatui::crossterm::event::{
     KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
 };
+use ratatui::crossterm::queue;
 use ratatui::layout::{Position, Rect};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::Sender;
@@ -707,9 +709,11 @@ impl App {
             return;
         }
         let count = text.chars().count();
-        let mut bytes = b"\x1b]52;c;".to_vec();
-        bytes.extend_from_slice(base64(text.as_bytes()).as_bytes());
-        bytes.extend_from_slice(b"\x1b\\");
+        let mut bytes = Vec::new();
+        if queue!(bytes, CopyToClipboard::to_clipboard_from(text)).is_err() {
+            self.flash("Could not copy selection");
+            return;
+        }
         self.outbox.extend_from_slice(&bytes);
         self.flash(format!("Copied {count} chars"));
     }
@@ -829,44 +833,9 @@ fn clamp_to_pane(at: Position, pane: Rect) -> (u16, u16) {
     (x, y)
 }
 
-/// Standard base64, used only for OSC 52 clipboard writes.
-fn base64(input: &[u8]) -> String {
-    const T: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let mut out = String::with_capacity(input.len().div_ceil(3) * 4);
-    for chunk in input.chunks(3) {
-        let b = [
-            chunk[0],
-            *chunk.get(1).unwrap_or(&0),
-            *chunk.get(2).unwrap_or(&0),
-        ];
-        out.push(T[(b[0] >> 2) as usize] as char);
-        out.push(T[(((b[0] & 0b11) << 4) | (b[1] >> 4)) as usize] as char);
-        if chunk.len() > 1 {
-            out.push(T[(((b[1] & 0b1111) << 2) | (b[2] >> 6)) as usize] as char);
-        } else {
-            out.push('=');
-        }
-        if chunk.len() > 2 {
-            out.push(T[(b[2] & 0b111111) as usize] as char);
-        } else {
-            out.push('=');
-        }
-    }
-    out
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn base64_matches_the_standard_examples() {
-        assert_eq!(base64(b""), "");
-        assert_eq!(base64(b"f"), "Zg==");
-        assert_eq!(base64(b"fo"), "Zm8=");
-        assert_eq!(base64(b"foo"), "Zm9v");
-        assert_eq!(base64(b"foobar"), "Zm9vYmFy");
-    }
 
     #[test]
     fn selection_is_normalized() {
