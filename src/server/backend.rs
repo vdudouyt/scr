@@ -8,6 +8,7 @@ use ratatui::backend::{Backend, ClearType, WindowSize};
 use ratatui::buffer::Cell;
 use ratatui::layout::{Position, Size};
 use ratatui::style::{Color, Modifier};
+use std::fmt::Write as _;
 use std::io;
 use std::io::Write;
 
@@ -58,44 +59,40 @@ impl Backend for AnsiBackend {
     type Error = io::Error;
 
     #[allow(deprecated)]
+    #[allow(deprecated)]
     fn draw<'a, I>(&mut self, content: I) -> io::Result<()>
     where
         I: Iterator<Item = (u16, u16, &'a Cell)>,
     {
+        let mut last_pos: Option<(u16, u16)> = None;
+        let mut current = Sgr::default();
         for (x, y, cell) in content {
             if cell.skip {
                 continue;
             }
-            self.move_to(x, y);
+            if !matches!(last_pos, Some((px, py)) if x == px + 1 && y == py) {
+                self.move_to(x, y);
+            }
+            let next = Sgr {
+                fg: cell.fg,
+                bg: cell.bg,
+                mods: cell.modifier,
+                underline: cell.underline_color,
+            };
+            if next != current {
+                push_sgr(&mut self.out, &next);
+                current = next;
+            }
+            let symbol = cell.symbol();
+            if symbol.is_empty() {
+                self.out.push(b' ');
+            } else {
+                self.out.extend_from_slice(symbol.as_bytes());
+            }
+            last_pos = Some((x, y));
+        }
+        if current != Sgr::default() {
             self.out.extend_from_slice(b"\x1b[0m");
-            let mut mods = String::new();
-            let m = cell.modifier;
-            for (flag, code) in [
-                (Modifier::BOLD, "1"),
-                (Modifier::DIM, "2"),
-                (Modifier::ITALIC, "3"),
-                (Modifier::UNDERLINED, "4"),
-                (Modifier::SLOW_BLINK, "5"),
-                (Modifier::RAPID_BLINK, "6"),
-                (Modifier::REVERSED, "7"),
-                (Modifier::HIDDEN, "8"),
-                (Modifier::CROSSED_OUT, "9"),
-            ] {
-                if m.contains(flag) {
-                    mods.push_str(code);
-                    mods.push(';');
-                }
-            }
-            if !mods.is_empty() {
-                mods.pop();
-                let _ = write!(self.out, "\x1b[{mods}m");
-            }
-            push_color(&mut self.out, cell.fg, true);
-            push_color(&mut self.out, cell.bg, false);
-            if cell.underline_color != Color::Reset {
-                push_underline(&mut self.out, cell.underline_color);
-            }
-            self.out.extend_from_slice(cell.symbol().as_bytes());
         }
         Ok(())
     }
@@ -168,83 +165,117 @@ impl Backend for AnsiBackend {
 }
 
 
-fn push_color(out: &mut Vec<u8>, color: Color, fg: bool) {
-    let (base, bright, ext) = if fg {
-        (30, 90, 38)
-    } else {
-        (40, 100, 48)
-    };
-    match color {
-        Color::Reset => {
-            let _ = write!(out, "\x1b[{}m", if fg { 39 } else { 49 });
-        }
-        Color::Black => {
-            let _ = write!(out, "\x1b[{}m", base);
-        }
-        Color::Red => {
-            let _ = write!(out, "\x1b[{}m", base + 1);
-        }
-        Color::Green => {
-            let _ = write!(out, "\x1b[{}m", base + 2);
-        }
-        Color::Yellow => {
-            let _ = write!(out, "\x1b[{}m", base + 3);
-        }
-        Color::Blue => {
-            let _ = write!(out, "\x1b[{}m", base + 4);
-        }
-        Color::Magenta => {
-            let _ = write!(out, "\x1b[{}m", base + 5);
-        }
-        Color::Cyan => {
-            let _ = write!(out, "\x1b[{}m", base + 6);
-        }
-        Color::Gray => {
-            let _ = write!(out, "\x1b[{}m", base + 7);
-        }
-        Color::DarkGray => {
-            let _ = write!(out, "\x1b[{}m", bright);
-        }
-        Color::LightRed => {
-            let _ = write!(out, "\x1b[{}m", bright + 1);
-        }
-        Color::LightGreen => {
-            let _ = write!(out, "\x1b[{}m", bright + 2);
-        }
-        Color::LightYellow => {
-            let _ = write!(out, "\x1b[{}m", bright + 3);
-        }
-        Color::LightBlue => {
-            let _ = write!(out, "\x1b[{}m", bright + 4);
-        }
-        Color::LightMagenta => {
-            let _ = write!(out, "\x1b[{}m", bright + 5);
-        }
-        Color::LightCyan => {
-            let _ = write!(out, "\x1b[{}m", bright + 6);
-        }
-        Color::White => {
-            let _ = write!(out, "\x1b[{}m", bright + 7);
-        }
-        Color::Rgb(r, g, b) => {
-            let _ = write!(out, "\x1b[{ext};2;{r};{g};{b}m");
-        }
-        Color::Indexed(n) => {
-            let _ = write!(out, "\x1b[{ext};5;{n}m");
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Sgr {
+    fg: Color,
+    bg: Color,
+    mods: Modifier,
+    underline: Color,
+}
+
+impl Default for Sgr {
+    fn default() -> Self {
+        Sgr {
+            fg: Color::Reset,
+            bg: Color::Reset,
+            mods: Modifier::empty(),
+            underline: Color::Reset,
         }
     }
 }
 
-fn push_underline(out: &mut Vec<u8>, color: Color) {
+fn push_sgr(out: &mut Vec<u8>, sgr: &Sgr) {
+    let mut params = String::from("0");
+    push_color_param(&mut params, sgr.fg, true);
+    push_color_param(&mut params, sgr.bg, false);
+    for (flag, code) in [
+        (Modifier::BOLD, "1"),
+        (Modifier::DIM, "2"),
+        (Modifier::ITALIC, "3"),
+        (Modifier::UNDERLINED, "4"),
+        (Modifier::SLOW_BLINK, "5"),
+        (Modifier::RAPID_BLINK, "6"),
+        (Modifier::REVERSED, "7"),
+        (Modifier::HIDDEN, "8"),
+        (Modifier::CROSSED_OUT, "9"),
+    ] {
+        if sgr.mods.contains(flag) {
+            params.push(';');
+            params.push_str(code);
+        }
+    }
+    if sgr.underline != Color::Reset {
+        match sgr.underline {
+            Color::Rgb(r, g, b) => {
+                let _ = write!(params, ";58;2;{r};{g};{b}");
+            }
+            Color::Indexed(n) => {
+                let _ = write!(params, ";58;5;{n}");
+            }
+            _ => {}
+        }
+    }
+    let _ = write!(out, "\x1b[{params}m");
+}
+
+fn push_color_param(out: &mut String, color: Color, fg: bool) {
+    let (base, bright, ext) = if fg { (30, 90, 38) } else { (40, 100, 48) };
     match color {
+        Color::Reset => {}
+        Color::Black => {
+            let _ = write!(out, ";{base}");
+        }
+        Color::Red => {
+            let _ = write!(out, ";{}", base + 1);
+        }
+        Color::Green => {
+            let _ = write!(out, ";{}", base + 2);
+        }
+        Color::Yellow => {
+            let _ = write!(out, ";{}", base + 3);
+        }
+        Color::Blue => {
+            let _ = write!(out, ";{}", base + 4);
+        }
+        Color::Magenta => {
+            let _ = write!(out, ";{}", base + 5);
+        }
+        Color::Cyan => {
+            let _ = write!(out, ";{}", base + 6);
+        }
+        Color::Gray => {
+            let _ = write!(out, ";{}", base + 7);
+        }
+        Color::DarkGray => {
+            let _ = write!(out, ";{bright}");
+        }
+        Color::LightRed => {
+            let _ = write!(out, ";{}", bright + 1);
+        }
+        Color::LightGreen => {
+            let _ = write!(out, ";{}", bright + 2);
+        }
+        Color::LightYellow => {
+            let _ = write!(out, ";{}", bright + 3);
+        }
+        Color::LightBlue => {
+            let _ = write!(out, ";{}", bright + 4);
+        }
+        Color::LightMagenta => {
+            let _ = write!(out, ";{}", bright + 5);
+        }
+        Color::LightCyan => {
+            let _ = write!(out, ";{}", bright + 6);
+        }
+        Color::White => {
+            let _ = write!(out, ";{}", bright + 7);
+        }
         Color::Rgb(r, g, b) => {
-            let _ = write!(out, "\x1b[58;2;{r};{g};{b}m");
+            let _ = write!(out, ";{ext};2;{r};{g};{b}");
         }
         Color::Indexed(n) => {
-            let _ = write!(out, "\x1b[58;5;{n}m");
+            let _ = write!(out, ";{ext};5;{n}");
         }
-        Color::Reset => {}
-        _ => {}
     }
 }
 
@@ -266,6 +297,31 @@ mod tests {
         let out = String::from_utf8(b.take()).unwrap();
         assert!(out.contains("\x1b[1;1H"));
         assert!(out.ends_with('A'));
+    }
+
+    #[test]
+    fn adjacent_same_style_cells_share_one_move_and_one_style() {
+        let mut b = AnsiBackend::new(20, 2);
+        let mut buf = Buffer::empty(Rect::new(0, 0, 5, 1));
+        for x in 0..5 {
+            buf[(x, 0)]
+                .set_symbol("x")
+                .set_style(
+                    ratatui::style::Style::new()
+                        .fg(Color::Red)
+                        .bg(Color::Blue),
+                );
+        }
+        b.draw(buf.content.iter().enumerate().map(|(i, c)| {
+            (i as u16, 0, c)
+        }))
+        .unwrap();
+        let out = String::from_utf8(b.take()).unwrap();
+        assert_eq!(out.matches("\x1b[1;1H").count(), 1);
+        assert!(!out.contains("\x1b[1;2H"));
+        assert_eq!(out.matches("31;44").count(), 1);
+        assert_eq!(out.matches("xxxxx").count(), 1);
+        assert!(out.ends_with("\x1b[0m"));
     }
 
     #[test]

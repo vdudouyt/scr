@@ -16,7 +16,7 @@ use std::os::unix::fs::PermissionsExt;
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, Sender, channel};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 enum Event {
     Conn(UnixStream),
@@ -136,11 +136,6 @@ fn event_loop(app: &mut App, rx: Receiver<Event>, event_tx: Sender<Event>) -> Re
     let mut client: Option<Client> = None;
     let mut next_generation = 0u64;
     let mut dirty = true;
-    // Full-screen programs can produce output faster than a terminal can
-    // usefully repaint. Coalesce bursts at ~100 fps instead of drawing per
-    // read; the first frame still goes out immediately.
-    const FRAME: Duration = Duration::from_millis(10);
-    let mut last_draw = Instant::now() - Duration::from_secs(1);
 
     loop {
         if app.detach_requested {
@@ -159,25 +154,17 @@ fn event_loop(app: &mut App, rx: Receiver<Event>, event_tx: Sender<Event>) -> Re
             dirty = true;
         }
 
-        if dirty && client.is_some() && last_draw.elapsed() >= FRAME {
+        if dirty {
             if let Some(c) = client.as_mut() {
                 if let Err(e) = draw(c, app) {
                     session::log_error(&app.name, &e);
                     detach_client(&mut client);
                 }
+                dirty = false;
             }
-            last_draw = Instant::now();
-            dirty = false;
         }
 
-        let wait = if dirty && client.is_some() {
-            FRAME
-                .checked_sub(last_draw.elapsed())
-                .unwrap_or(Duration::ZERO)
-        } else {
-            Duration::from_millis(80)
-        };
-        match rx.recv_timeout(wait) {
+        match rx.recv_timeout(Duration::from_millis(80)) {
             Ok(Event::Conn(stream)) => {
                 handle_conn(
                     stream,
