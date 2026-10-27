@@ -8,7 +8,7 @@ use ratatui::layout::{Position, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
-use tui_term::widget::{Cell as TermCell, Cursor, PseudoTerminal, Screen as TermScreen};
+use tui_term::widget::{Cursor, PseudoTerminal};
 
 pub fn render(f: &mut Frame, app: &mut App, l: Layout) {
     let Some(tab) = app.tabs.get(app.active) else {
@@ -24,28 +24,34 @@ pub fn render(f: &mut Frame, app: &mut App, l: Layout) {
     };
     let history = scrollback::history(parser.screen_mut());
     let scrolling = parser.screen().scrollback() > 0;
-    let mut cursor = Cursor::default()
-        .symbol("█")
-        .style(Style::new().bg(theme::GRAY).fg(theme::BLACK));
-    if app.mode != Mode::Normal
-        || scrolling
-        || tab.session.has_exited()
-        || parser.screen().hide_cursor()
-    {
-        cursor.hide();
-    }
-    // vt100's own cells render default colours as `Reset`, which would make
-    // the canvas depend on the outer terminal's palette. A small wrapper
-    // substitutes a black canvas with light-gray text; the Turbo Vision blue
-    // is kept for the chrome around it.
-    let tv = TvScreen::new(parser.screen());
+    // tui-term draws a block; use the real terminal cursor instead so its
+    // shape and blink follow the outer terminal, and so it cannot disappear
+    // into the canvas. Ratatui hides the cursor unless we ask for it.
+    let cursor_pos = parser.screen().cursor_position();
+    let show_cursor = app.mode == Mode::Normal
+        && !scrolling
+        && !tab.session.has_exited()
+        && !parser.screen().hide_cursor();
+    let mut cursor = Cursor::default();
+    cursor.hide();
+    // vt100 reports default colours as `Reset`, which would leave the canvas
+    // to the outer terminal's palette. Draw normally, then replace only those
+    // resets. This is much cheaper than copying every cell into a wrapper (and
+    // keeps full-screen programs responsive).
     f.render_widget(
-        PseudoTerminal::new(&tv)
+        PseudoTerminal::new(parser.screen())
             .cursor(cursor)
             .style(Style::new().bg(theme::BLACK).fg(theme::GRAY)),
         l.term,
     );
     drop(parser);
+    apply_defaults(f, l.term);
+    if show_cursor {
+        let (row, col) = cursor_pos;
+        if col < l.term.width && row < l.term.height {
+            f.set_cursor_position(Position::new(l.term.x + col, l.term.y + row));
+        }
+    }
 
     if let Some(sel) = app.selection {
         paint_selection(f, l.term, sel);
@@ -53,6 +59,24 @@ pub fn render(f: &mut Frame, app: &mut App, l: Layout) {
 
     if l.bar.width > 0 && l.bar.height > 0 {
         render_bar(f, l.bar, history, l.term.height, app.hover == HoverTarget::Scrollbar);
+    }
+}
+
+/// vt100 leaves default foreground/background as `Reset`; give the pane the
+/// Turbo Vision canvas without touching colours a program chose itself.
+fn apply_defaults(f: &mut Frame, term: Rect) {
+    let buf = f.buffer_mut();
+    for row in 0..term.height {
+        for col in 0..term.width {
+            if let Some(cell) = buf.cell_mut(Position::new(term.x + col, term.y + row)) {
+                if cell.fg == Color::Reset {
+                    cell.fg = theme::GRAY;
+                }
+                if cell.bg == Color::Reset {
+                    cell.bg = theme::BLACK;
+                }
+            }
+        }
     }
 }
 
@@ -76,122 +100,6 @@ fn paint_selection(f: &mut Frame, term: Rect, sel: Selection) {
                 cell.set_style(theme::selection());
             }
         }
-    }
-}
-
-/// A read-only snapshot of a vt100 screen with Turbo Vision defaults.
-struct TvCell {
-    symbol: String,
-    has: bool,
-    fg: Color,
-    bg: Color,
-    modifier: Modifier,
-}
-
-impl TermCell for TvCell {
-    fn has_contents(&self) -> bool {
-        self.has
-    }
-
-    fn apply(&self, cell: &mut ratatui::buffer::Cell) {
-        if self.has {
-            cell.set_symbol(&self.symbol);
-        }
-        cell.set_style(
-            Style::reset()
-                .fg(self.fg)
-                .bg(self.bg)
-                .add_modifier(self.modifier),
-        );
-    }
-}
-
-struct TvScreen {
-    rows: u16,
-    cols: u16,
-    cells: Vec<TvCell>,
-    hide: bool,
-    cursor: (u16, u16),
-}
-
-impl TvScreen {
-    fn new(screen: &vt100::Screen) -> Self {
-        let (rows, cols) = screen.size();
-        let mut cells = Vec::with_capacity(rows as usize * cols as usize);
-        for row in 0..rows {
-            for col in 0..cols {
-                let Some(c) = screen.cell(row, col) else {
-                    cells.push(TvCell {
-                        symbol: " ".into(),
-                        has: false,
-                        fg: theme::GRAY,
-                        bg: theme::BLACK,
-                        modifier: Modifier::empty(),
-                    });
-                    continue;
-                };
-                let mut modifier = Modifier::empty();
-                if c.bold() {
-                    modifier |= Modifier::BOLD;
-                }
-                if c.dim() {
-                    modifier |= Modifier::DIM;
-                }
-                if c.italic() {
-                    modifier |= Modifier::ITALIC;
-                }
-                if c.underline() {
-                    modifier |= Modifier::UNDERLINED;
-                }
-                if c.inverse() {
-                    modifier |= Modifier::REVERSED;
-                }
-                cells.push(TvCell {
-                    symbol: c.contents().to_string(),
-                    has: c.has_contents(),
-                    fg: map_color(c.fgcolor(), theme::GRAY),
-                    bg: map_color(c.bgcolor(), theme::BLACK),
-                    modifier,
-                });
-            }
-        }
-        let (cr, cc) = screen.cursor_position();
-        let sb = u16::try_from(screen.scrollback()).unwrap_or(u16::MAX);
-        TvScreen {
-            rows,
-            cols,
-            cells,
-            hide: screen.hide_cursor(),
-            cursor: (cr.saturating_add(sb), cc),
-        }
-    }
-}
-
-impl TermScreen for TvScreen {
-    type C = TvCell;
-
-    fn cell(&self, row: u16, col: u16) -> Option<&Self::C> {
-        if row >= self.rows || col >= self.cols {
-            return None;
-        }
-        self.cells
-            .get(row as usize * self.cols as usize + col as usize)
-    }
-
-    fn hide_cursor(&self) -> bool {
-        self.hide
-    }
-
-    fn cursor_position(&self) -> (u16, u16) {
-        self.cursor
-    }
-}
-
-fn map_color(c: vt100::Color, default: Color) -> Color {
-    match c {
-        vt100::Color::Default => default,
-        vt100::Color::Idx(i) => Color::Indexed(i),
-        vt100::Color::Rgb(r, g, b) => Color::Rgb(r, g, b),
     }
 }
 

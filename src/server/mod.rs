@@ -16,7 +16,7 @@ use std::os::unix::fs::PermissionsExt;
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, Sender, channel};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 enum Event {
     Conn(UnixStream),
@@ -136,6 +136,11 @@ fn event_loop(app: &mut App, rx: Receiver<Event>, event_tx: Sender<Event>) -> Re
     let mut client: Option<Client> = None;
     let mut next_generation = 0u64;
     let mut dirty = true;
+    // Full-screen programs can produce output faster than a terminal can
+    // usefully repaint. Coalesce bursts at ~100 fps instead of drawing per
+    // read; the first frame still goes out immediately.
+    const FRAME: Duration = Duration::from_millis(10);
+    let mut last_draw = Instant::now() - Duration::from_secs(1);
 
     loop {
         if app.detach_requested {
@@ -154,17 +159,25 @@ fn event_loop(app: &mut App, rx: Receiver<Event>, event_tx: Sender<Event>) -> Re
             dirty = true;
         }
 
-        if dirty {
+        if dirty && client.is_some() && last_draw.elapsed() >= FRAME {
             if let Some(c) = client.as_mut() {
                 if let Err(e) = draw(c, app) {
                     session::log_error(&app.name, &e);
                     detach_client(&mut client);
                 }
-                dirty = false;
             }
+            last_draw = Instant::now();
+            dirty = false;
         }
 
-        match rx.recv_timeout(Duration::from_millis(80)) {
+        let wait = if dirty && client.is_some() {
+            FRAME
+                .checked_sub(last_draw.elapsed())
+                .unwrap_or(Duration::ZERO)
+        } else {
+            Duration::from_millis(80)
+        };
+        match rx.recv_timeout(wait) {
             Ok(Event::Conn(stream)) => {
                 handle_conn(
                     stream,
@@ -182,9 +195,17 @@ fn event_loop(app: &mut App, rx: Receiver<Event>, event_tx: Sender<Event>) -> Re
                 if c.generation != generation {
                     continue;
                 }
+                let mut redraw = true;
                 match msg {
                     ClientMsg::Key(k) => app.on_key(k.to_event()),
-                    ClientMsg::Mouse(m) => app.on_mouse(m.to_event()),
+                    ClientMsg::Mouse(m) => {
+                        let moved = matches!(m.kind, proto::MouseKindMsg::Moved);
+                        let before = app.hover;
+                        app.on_mouse(m.to_event());
+                        // A pure motion event that did not change the hover
+                        // target needs no repaint.
+                        redraw = !moved || app.hover != before;
+                    }
                     ClientMsg::Paste(text) => app.on_paste(&text),
                     ClientMsg::Resize { cols, rows } => {
                         app.set_size(cols, rows);
@@ -206,7 +227,9 @@ fn event_loop(app: &mut App, rx: Receiver<Event>, event_tx: Sender<Event>) -> Re
                         let _ = proto::write_frame(&mut c.stream, TAG_ANSI, &out);
                     }
                 }
-                dirty = true;
+                if redraw {
+                    dirty = true;
+                }
             }
             Ok(Event::ClientGone(generation)) => {
                 if client.as_ref().is_some_and(|c| c.generation == generation) {

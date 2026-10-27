@@ -25,7 +25,10 @@ impl AnsiBackend {
             out: Vec::with_capacity(16 * 1024),
             size: Size::new(width.max(1), height.max(1)),
             cursor: Position::new(0, 0),
-            cursor_visible: true,
+            // The client hides the hardware cursor when it enters the
+            // alternate screen. Start from that state so the first frame that
+            // asks for a cursor actually emits ?25h.
+            cursor_visible: false,
             sink: None,
         }
     }
