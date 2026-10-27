@@ -105,7 +105,7 @@ pub fn render(f: &mut Frame, area: Rect, app: &mut App) {
         let close_rect = Rect::new(x + w - 2, area.y, 1, 1);
         app.regions.tab_closes.push((close_rect, i));
         let close_style = if app.hover == HoverTarget::TabClose(i) {
-            theme::tab_close_hover()
+            base.patch(theme::tab_close_hover())
         } else {
             base
         };

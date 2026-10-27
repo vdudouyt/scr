@@ -789,7 +789,10 @@ mod tests {
             .find(|(_, i)| *i == 0)
             .unwrap()
             .0;
-        assert_eq!(term.backend().buffer()[(close.x, 0)].bg, theme::BG_BASE);
+        assert_eq!(
+            term.backend().buffer()[(close.x, 0)].bg,
+            theme::BG_HOVER_LIGHT
+        );
 
         a.hover = HoverTarget::NewTab;
         term.draw(|f| crate::ui::draw(f, &mut a)).unwrap();

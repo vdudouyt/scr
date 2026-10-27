@@ -55,11 +55,10 @@ pub fn tab_hover() -> Style {
 pub fn tab_active_hover() -> Style {
     Style::new().bg(BG_HOVER_LIGHT).fg(WHITE)
 }
+/// The close glyph is drawn on the tab's own background, so hovering it keeps
+/// that tab's hover colour and only brightens the glyph.
 pub fn tab_close_hover() -> Style {
-    Style::new()
-        .bg(BG_BASE)
-        .fg(FG_BRIGHT)
-        .add_modifier(Modifier::BOLD)
+    Style::new().fg(WHITE).add_modifier(Modifier::BOLD)
 }
 
 pub fn key_hint() -> Style {
