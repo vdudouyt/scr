@@ -134,8 +134,9 @@ do not get a blue wash.
 
 - `src/client.rs` — attaches, forwards crossterm input, relays ANSI frames.
 - `src/server/` — session daemon, tab state, event loop.
-- `src/server/backend.rs` — a ratatui `Backend` that renders cell diffs into an
-  ANSI byte stream over the socket.
+- `src/server/backend.rs` — `CrosstermBackend` (the same encoder OpenAdmin
+  uses) wrapped around a socket buffer, with the size and cursor position
+  supplied by the attached client.
 - `src/term/` — PTY sessions, xterm key/mouse encoders, scrollback rules.
 - `src/app.rs` — tabs, prefix state machine, mouse routing, selection, dialogs.
 - `src/ui/` — Turbo Vision theme, tab strip, status line, pane, dialogs.
@@ -143,8 +144,9 @@ do not get a blue wash.
 - `src/session.rs` — runtime directory, locks, discovery, daemon spawning.
 
 Session output is parsed by `vt100` in the daemon. The daemon renders with
-`ratatui` into the custom ANSI backend; the client never interprets screen
-contents, so detach/reattach and multiple tabs stay consistent.
+`ratatui` through `CrosstermBackend` into the socket; the client never
+interprets screen contents, so detach/reattach and multiple tabs stay
+consistent. The only custom part is the sink and the client-supplied size.
 
 ## Tests
 
@@ -153,7 +155,7 @@ cargo test
 ```
 
 Unit coverage includes key/mouse encoders, scrollback, the tab/prefix state
-machine, geometry, OSC 52 base64, session locking and the ANSI backend. The
+machine, geometry, OSC 52 base64, session locking and the backend wrapper. The
 end-to-end test runs a real client on a PTY against a real daemon: it opens tabs,
 switches with Alt+1, detaches, reattaches, closes tabs, ends a session, and
 verifies that a `SIGKILL`ed daemon disappears from the listing and removes its
