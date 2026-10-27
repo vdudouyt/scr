@@ -1,6 +1,6 @@
 //! Borderless modal dialogs: the tab list and help.
 
-use crate::app::{App, DialogButton, HoverTarget};
+use crate::app::{App, HoverTarget};
 use crate::ui::theme;
 use ratatui::Frame;
 use ratatui::layout::Rect;
@@ -36,9 +36,9 @@ pub fn inner(area: Rect) -> Rect {
 pub fn tab_picker(f: &mut Frame, screen: Rect, app: &mut App) {
     let n = app.tabs.len();
     let w = 58.min(screen.width.saturating_sub(2)).max(24.min(screen.width));
-    let h = (n as u16 + 6)
+    let h = (n as u16 + 5)
         .min(screen.height.saturating_sub(2))
-        .max(8.min(screen.height));
+        .max(6.min(screen.height));
     if w == 0 || h == 0 {
         return;
     }
@@ -100,31 +100,22 @@ pub fn tab_picker(f: &mut Frame, screen: Rect, app: &mut App) {
         );
     }
 
-    let by = inside.y + inside.height.saturating_sub(1);
-    let labels = [
-        ("Go To", DialogButton::GoTo, true),
-        ("Cancel", DialogButton::Cancel, false),
-    ];
-    let mut x = inside.x + 2;
-    for (label, button, default) in labels {
-        let text = format!(" {label} ");
-        let rect = Rect::new(x, by, text.chars().count() as u16, 1);
-        app.regions.dialog_buttons.push((rect, button));
-        let style = if app.hover == HoverTarget::DialogButton(button) {
-            theme::button_hover()
-        } else if default {
-            theme::button_default()
-        } else {
-            theme::button()
-        };
-        f.render_widget(Paragraph::new(Span::styled(text, style)), rect);
-        x += rect.width + 3;
-    }
+    let hint_y = inside.y + inside.height.saturating_sub(1);
+    f.render_widget(
+        Paragraph::new(Line::from(vec![
+            Span::styled("Enter", theme::key_hint()),
+            Span::styled(" goto    ", theme::dialog_muted()),
+            Span::styled("Esc", theme::dialog_bg().fg(theme::FG)),
+            Span::styled(" cancel", theme::dialog_muted()),
+        ]))
+        .style(theme::dialog_bg()),
+        Rect::new(inside.x, hint_y, inside.width, 1),
+    )
 }
 
-pub fn help(f: &mut Frame, screen: Rect, app: &mut App) {
+pub fn help(f: &mut Frame, screen: Rect, _app: &mut App) {
     let w = 62.min(screen.width.saturating_sub(2)).max(30.min(screen.width));
-    let h = 17.min(screen.height.saturating_sub(2)).max(9.min(screen.height));
+    let h = 13.min(screen.height.saturating_sub(2)).max(9.min(screen.height));
     if w == 0 || h == 0 {
         return;
     }
@@ -160,18 +151,17 @@ pub fn help(f: &mut Frame, screen: Rect, app: &mut App) {
             Rect::new(inside.x, inside.y + i as u16, inside.width, 1),
         );
     }
-    let button = DialogButton::Ok;
-    let label = " OK ";
-    let by = inside.y + inside.height.saturating_sub(1);
-    let x = inside.x + (inside.width.saturating_sub(label.len() as u16)) / 2;
-    let brect = Rect::new(x, by, label.len() as u16, 1);
-    app.regions.dialog_buttons.push((brect, button));
-    let style = if app.hover == HoverTarget::DialogButton(button) {
-        theme::button_hover()
-    } else {
-        theme::button_default()
-    };
-    f.render_widget(Paragraph::new(Span::styled(label, style)), brect);
+    let hint_y = inside.y + inside.height.saturating_sub(1);
+    f.render_widget(
+        Paragraph::new(Line::from(vec![
+            Span::styled("Enter", theme::key_hint()),
+            Span::styled(" close    ", theme::dialog_muted()),
+            Span::styled("Esc", theme::dialog_bg().fg(theme::FG)),
+            Span::styled(" close", theme::dialog_muted()),
+        ]))
+        .style(theme::dialog_bg()),
+        Rect::new(inside.x, hint_y, inside.width, 1),
+    )
 }
 
 fn clip(s: &str, max: usize) -> String {

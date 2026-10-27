@@ -97,22 +97,6 @@ pub fn list_hover() -> Style {
 pub fn list_marker() -> Style {
     Style::new().bg(BG_PANEL).fg(FG_MUTED)
 }
-pub fn button() -> Style {
-    Style::new().bg(BG_PANEL).fg(FG_MUTED)
-}
-pub fn button_hover() -> Style {
-    Style::new()
-        .bg(FG)
-        .fg(BG_BASE)
-        .add_modifier(Modifier::BOLD)
-}
-pub fn button_default() -> Style {
-    Style::new()
-        .bg(BG_HOVER)
-        .fg(FG_BRIGHT)
-        .add_modifier(Modifier::BOLD)
-}
-
 pub fn live() -> Style {
     Style::new().fg(FG)
 }

@@ -14,16 +14,9 @@ use ratatui::widgets::{Block, Paragraph};
 use std::time::{Duration, Instant};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Button {
-    Attach,
-    Cancel,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Hover {
     None,
     Row(usize),
-    Button(Button),
 }
 
 struct State {
@@ -32,7 +25,6 @@ struct State {
     hover: Hover,
     message: Option<String>,
     rows: Vec<(Rect, usize)>,
-    buttons: Vec<(Rect, Button)>,
     last_click: Option<(Instant, usize)>,
 }
 
@@ -47,7 +39,6 @@ pub fn pick(sessions: Vec<SessionInfo>) -> Result<Option<String>> {
         hover: Hover::None,
         message: None,
         rows: Vec::new(),
-        buttons: Vec::new(),
         last_click: None,
     };
     let mut chosen = None;
@@ -108,13 +99,6 @@ pub fn pick(sessions: Vec<SessionInfo>) -> Result<Option<String>> {
                                 break;
                             }
                         }
-                        Hover::Button(Button::Attach) => {
-                            if let Some(name) = choose(&sessions, &mut state) {
-                                chosen = Some(name);
-                                break;
-                            }
-                        }
-                        Hover::Button(Button::Cancel) => break,
                         Hover::None => {}
                     }
                 }
@@ -146,11 +130,6 @@ fn choose(sessions: &[SessionInfo], state: &mut State) -> Option<String> {
 }
 
 fn hit(state: &State, at: Position) -> Hover {
-    for &(rect, b) in &state.buttons {
-        if rect.contains(at) {
-            return Hover::Button(b);
-        }
-    }
     for &(rect, i) in &state.rows {
         if rect.contains(at) {
             return Hover::Row(i);
@@ -163,14 +142,13 @@ fn draw(f: &mut ratatui::Frame, sessions: &[SessionInfo], state: &mut State) {
     let screen = f.area();
     f.render_widget(Block::new().style(theme::base()), screen);
     state.rows.clear();
-    state.buttons.clear();
     if sessions.is_empty() {
         return;
     }
     let w = 74.min(screen.width.saturating_sub(2)).max(30.min(screen.width));
-    let h = (sessions.len() as u16 + 7)
+    let h = (sessions.len() as u16 + 6)
         .min(screen.height.saturating_sub(2))
-        .max(9.min(screen.height));
+        .max(8.min(screen.height));
     if w == 0 || h == 0 {
         return;
     }
@@ -225,37 +203,28 @@ fn draw(f: &mut ratatui::Frame, sessions: &[SessionInfo], state: &mut State) {
         );
     }
 
-    let msg_y = inside.y + inside.height.saturating_sub(2);
-    let msg = state.message.as_deref().unwrap_or(
-        "Enter attach · double-click a row · Esc cancel",
-    );
-    let msg_style = if state.message.is_some() {
-        theme::dialog_bg().fg(theme::FG_BRIGHT)
-    } else {
-        theme::dialog_muted()
-    };
-    f.render_widget(
-        Paragraph::new(Span::styled(format!(" {msg}"), msg_style)),
-        Rect::new(inside.x, msg_y, inside.width, 1),
-    );
-
-    let by = inside.y + inside.height.saturating_sub(1);
-    let labels = [("Attach", Button::Attach, true), ("Cancel", Button::Cancel, false)];
-    let mut x = inside.x + 2;
-    for (label, button, default) in labels {
-        let text = format!(" {label} ");
-        let r = Rect::new(x, by, text.chars().count() as u16, 1);
-        state.buttons.push((r, button));
-        let style = if state.hover == Hover::Button(button) {
-            theme::button_hover()
-        } else if default {
-            theme::button_default()
-        } else {
-            theme::button()
-        };
-        f.render_widget(Paragraph::new(Span::styled(text, style)), r);
-        x += r.width + 3;
+    if let Some(msg) = state.message.as_deref() {
+        let msg_y = inside.y + inside.height.saturating_sub(2);
+        f.render_widget(
+            Paragraph::new(Span::styled(
+                format!(" {msg}"),
+                theme::dialog_bg().fg(theme::FG_BRIGHT),
+            )),
+            Rect::new(inside.x, msg_y, inside.width, 1),
+        );
     }
+
+    let hint_y = inside.y + inside.height.saturating_sub(1);
+    f.render_widget(
+        Paragraph::new(Line::from(vec![
+            Span::styled("Enter", theme::key_hint()),
+            Span::styled(" attach    ", theme::dialog_muted()),
+            Span::styled("Esc", theme::dialog_bg().fg(theme::FG)),
+            Span::styled(" cancel", theme::dialog_muted()),
+        ]))
+        .style(theme::dialog_bg()),
+        Rect::new(inside.x, hint_y, inside.width, 1),
+    )
 }
 
 fn clip(s: &str, max: usize) -> String {

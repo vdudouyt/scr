@@ -22,13 +22,6 @@ pub enum Mode {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum DialogButton {
-    GoTo,
-    Cancel,
-    Ok,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HoverTarget {
     None,
     Tab(usize),
@@ -36,7 +29,6 @@ pub enum HoverTarget {
     NewTab,
     Pane,
     DialogRow(usize),
-    DialogButton(DialogButton),
 }
 
 #[derive(Debug, Default, Clone)]
@@ -46,7 +38,6 @@ pub struct Regions {
     pub new_tab: Option<Rect>,
     pub pane: Option<Rect>,
     pub dialog_rows: Vec<(Rect, usize)>,
-    pub dialog_buttons: Vec<(Rect, DialogButton)>,
 }
 
 impl Regions {
@@ -56,7 +47,6 @@ impl Regions {
         self.new_tab = None;
         self.pane = None;
         self.dialog_rows.clear();
-        self.dialog_buttons.clear();
     }
 }
 
@@ -522,11 +512,6 @@ impl App {
                     return HoverTarget::DialogRow(i);
                 }
             }
-            for &(rect, b) in &self.regions.dialog_buttons {
-                if rect.contains(at) {
-                    return HoverTarget::DialogButton(b);
-                }
-            }
             return HoverTarget::None;
         }
         for &(rect, i) in &self.regions.tab_closes {
@@ -668,28 +653,16 @@ impl App {
         if ev.kind != MouseEventKind::Down(MouseButton::Left) {
             return;
         }
-        match self.hit_test(at) {
-            HoverTarget::DialogRow(i) => {
-                if self.mode == Mode::TabPicker {
-                    if let Some(p) = self.tab_picker.as_mut() {
-                        p.cursor = i;
-                    }
-                    self.commit_tab_picker();
-                }
+        if self.mode == Mode::TabPicker
+            && let HoverTarget::DialogRow(i) = self.hit_test(at)
+        {
+            if let Some(p) = self.tab_picker.as_mut() {
+                p.cursor = i;
             }
-            HoverTarget::DialogButton(DialogButton::GoTo) if self.mode == Mode::TabPicker => {
-                self.commit_tab_picker();
-            }
-            HoverTarget::DialogButton(DialogButton::Cancel) if self.mode == Mode::TabPicker => {
-                self.mode = Mode::Normal;
-                self.tab_picker = None;
-            }
-            HoverTarget::DialogButton(DialogButton::Ok) if self.mode == Mode::Help => {
-                self.mode = Mode::Normal;
-            }
-            _ => {}
+            self.commit_tab_picker();
         }
     }
+
 }
 
 #[cfg(test)]
