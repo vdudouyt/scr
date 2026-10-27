@@ -124,10 +124,11 @@ $
 ```
 
 The terminal gets every row below the tab strip and the full width. There is no
-status bar, no scrollbar column and no window frame border. Tab headers are
-inverted (gray background, dark text), and dialogs are borderless panels over
-the terminal. The terminal pane itself leaves default colours to the terminal,
-so its background and transparency are untouched.
+status bar, no scrollbar column and no window frame border. Inactive tabs sit on
+the bar's own background; the active tab is a subtly raised dark panel, and
+dialogs are borderless panels over the terminal. The terminal pane itself
+leaves default colours to the terminal, so its background and transparency are
+untouched.
 
 ## Architecture
 

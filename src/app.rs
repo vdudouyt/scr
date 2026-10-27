@@ -762,15 +762,17 @@ mod tests {
         a.add_tab(None).unwrap();
         let mut term = Terminal::new(TestBackend::new(80, 24)).unwrap();
 
-        a.hover = HoverTarget::Tab(1);
+        a.hover = HoverTarget::None;
         term.draw(|f| crate::ui::draw(f, &mut a)).unwrap();
         let active = a.regions.tabs.iter().find(|(_, i)| *i == 1).unwrap().0;
-        assert_eq!(term.backend().buffer()[(active.x + 1, 0)].bg, theme::WHITE);
+        assert_eq!(term.backend().buffer()[(active.x + 1, 0)].bg, theme::BG_SEL);
+        let idle = a.regions.tabs.iter().find(|(_, i)| *i == 0).unwrap().0;
+        assert_eq!(term.backend().buffer()[(idle.x + 1, 0)].bg, theme::BG_BASE);
 
         a.hover = HoverTarget::Tab(0);
         term.draw(|f| crate::ui::draw(f, &mut a)).unwrap();
         let idle = a.regions.tabs.iter().find(|(_, i)| *i == 0).unwrap().0;
-        assert_eq!(term.backend().buffer()[(idle.x + 1, 0)].bg, theme::WHITE);
+        assert_eq!(term.backend().buffer()[(idle.x + 1, 0)].bg, theme::BG_HOVER);
 
         a.hover = HoverTarget::TabClose(0);
         term.draw(|f| crate::ui::draw(f, &mut a)).unwrap();
@@ -786,6 +788,6 @@ mod tests {
         a.hover = HoverTarget::NewTab;
         term.draw(|f| crate::ui::draw(f, &mut a)).unwrap();
         let plus = a.regions.new_tab.unwrap();
-        assert_eq!(term.backend().buffer()[(plus.x, 0)].bg, theme::WHITE);
+        assert_eq!(term.backend().buffer()[(plus.x, 0)].bg, theme::BG_HOVER);
     }
 }

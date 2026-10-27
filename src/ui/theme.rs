@@ -38,29 +38,25 @@ pub fn faint() -> Style {
     Style::new().fg(FG_FAINT)
 }
 
-/// Tab headers are inverted: gray background, dark text. Idle tabs sit on the
-/// bar's own background with no block of their own; the active tab is a block,
-/// and hover is a brighter one.
+/// Idle tabs sit on the bar's own background with no block of their own. The
+/// active tab is a subtle raised panel, and hover is one step brighter.
 pub fn tab_idle() -> Style {
     Style::new().bg(BG_BASE).fg(FG_MUTED)
 }
 pub fn tab_active() -> Style {
-    Style::new()
-        .bg(FG)
-        .fg(BG_BASE)
-        .add_modifier(Modifier::BOLD)
+    Style::new().bg(BG_SEL).fg(FG_BRIGHT)
 }
 pub fn tab_hover() -> Style {
     Style::new()
-        .bg(WHITE)
-        .fg(BG_BASE)
-        .add_modifier(Modifier::BOLD | Modifier::UNDERLINED)
+        .bg(BG_HOVER)
+        .fg(FG_BRIGHT)
+        .add_modifier(Modifier::UNDERLINED)
 }
 pub fn tab_active_hover() -> Style {
     Style::new()
-        .bg(WHITE)
-        .fg(BG_BASE)
-        .add_modifier(Modifier::BOLD | Modifier::UNDERLINED)
+        .bg(BG_HOVER)
+        .fg(WHITE)
+        .add_modifier(Modifier::UNDERLINED)
 }
 pub fn tab_close_hover() -> Style {
     Style::new()
