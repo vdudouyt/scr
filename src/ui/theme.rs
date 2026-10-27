@@ -144,10 +144,10 @@ pub fn selection() -> Style {
     Style::new().bg(CYAN).fg(BLACK)
 }
 pub fn scroll_track() -> Style {
-    Style::new().bg(BLUE).fg(DARK)
+    Style::new().bg(BLACK).fg(DARK)
 }
 pub fn scroll_thumb() -> Style {
-    Style::new().bg(BLUE).fg(CYAN_BRIGHT)
+    Style::new().bg(BLACK).fg(CYAN_BRIGHT)
 }
 pub fn live() -> Style {
     Style::new().fg(GREEN)

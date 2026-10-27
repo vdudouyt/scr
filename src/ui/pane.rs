@@ -26,7 +26,7 @@ pub fn render(f: &mut Frame, app: &mut App, l: Layout) {
     let scrolling = parser.screen().scrollback() > 0;
     let mut cursor = Cursor::default()
         .symbol("█")
-        .style(Style::new().bg(theme::GRAY).fg(theme::BLUE));
+        .style(Style::new().bg(theme::GRAY).fg(theme::BLACK));
     if app.mode != Mode::Normal
         || scrolling
         || tab.session.has_exited()
@@ -35,13 +35,14 @@ pub fn render(f: &mut Frame, app: &mut App, l: Layout) {
         cursor.hide();
     }
     // vt100's own cells render default colours as `Reset`, which would make
-    // the "blue desktop" depend on the outer terminal's palette. A small
-    // wrapper substitutes Turbo Vision blue/light-gray for the defaults.
+    // the canvas depend on the outer terminal's palette. A small wrapper
+    // substitutes a black canvas with light-gray text; the Turbo Vision blue
+    // is kept for the chrome around it.
     let tv = TvScreen::new(parser.screen());
     f.render_widget(
         PseudoTerminal::new(&tv)
             .cursor(cursor)
-            .style(Style::new().bg(theme::BLUE).fg(theme::GRAY)),
+            .style(Style::new().bg(theme::BLACK).fg(theme::GRAY)),
         l.term,
     );
     drop(parser);
@@ -124,7 +125,7 @@ impl TvScreen {
                         symbol: " ".into(),
                         has: false,
                         fg: theme::GRAY,
-                        bg: theme::BLUE,
+                        bg: theme::BLACK,
                         modifier: Modifier::empty(),
                     });
                     continue;
@@ -149,7 +150,7 @@ impl TvScreen {
                     symbol: c.contents().to_string(),
                     has: c.has_contents(),
                     fg: map_color(c.fgcolor(), theme::GRAY),
-                    bg: map_color(c.bgcolor(), theme::BLUE),
+                    bg: map_color(c.bgcolor(), theme::BLACK),
                     modifier,
                 });
             }
@@ -198,7 +199,7 @@ fn render_bar(f: &mut Frame, area: Rect, history: Option<History>, term_rows: u1
     let arrow = if hot {
         theme::scroll_thumb()
     } else {
-        Style::new().bg(theme::BLUE).fg(theme::GRAY)
+        Style::new().bg(theme::BLACK).fg(theme::GRAY)
     };
     if area.height < 3 {
         f.render_widget(

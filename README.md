@@ -19,8 +19,9 @@ until the daemon ends.
 - Drag-select text and copy it with OSC 52. `Shift`+drag selects even when the
   running program has grabbed the mouse.
 - Session picker (`scr -r`) with keyboard and mouse.
-- Turbo Vision palette: blue desktop, gray windows, cyan selection, red
-  hotkeys, double-line dialogs with drop shadows.
+- Turbo Vision chrome: blue desktop, gray panels, cyan selection, red
+  hotkeys, double-line dialogs with drop shadows. The terminal canvas itself
+  stays black so tools that rely on a dark background remain readable.
 - No async runtime, database, or network stack.
 
 ## Build
@@ -125,7 +126,9 @@ $                                                                         ▼
 ```
 
 The terminal gets `rows - 2` and `cols - 1`; the last column is the scrollbar.
-There is no window frame border.
+There is no window frame border. Turbo Vision blue is used for the chrome; the
+terminal canvas is black, so programs that leave cells at their default colours
+do not get a blue wash.
 
 ## Architecture
 
