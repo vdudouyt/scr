@@ -48,22 +48,28 @@ pub fn render(f: &mut Frame, area: Rect, app: &mut App) {
         (
             text.clone(),
             Style::new()
-                .bg(theme::BLUE)
+                .bg(theme::BLUE_DARK)
                 .fg(theme::WHITE)
                 .add_modifier(Modifier::BOLD),
         )
     } else {
         (
-            app.name.clone(),
+            format!(
+                "{} · {} tab{}",
+                app.name,
+                app.tabs.len(),
+                if app.tabs.len() == 1 { "" } else { "s" }
+            ),
             Style::new().bg(theme::BLUE).fg(theme::GRAY),
         )
     };
-    let right = clip_title(&right_text, 24);
-    let session_reserve = if area.width >= 40 {
-        (right.chars().count() as u16 + 2).min(area.width / 3)
+    // Keep the tab window stable while a flash message comes and goes.
+    let session_reserve = if area.width >= 44 {
+        20u16.min(area.width / 3)
     } else {
         0
     };
+    let right = clip_title(&right_text, session_reserve.saturating_sub(2) as usize);
     let plus_w = if area.width >= 8 { PLUS } else { 0 };
     let avail = area.width.saturating_sub(session_reserve);
     let tabs_avail = avail.saturating_sub(plus_w);
@@ -128,7 +134,7 @@ pub fn render(f: &mut Frame, area: Rect, app: &mut App) {
             base.fg(theme::RED)
         };
 
-        spans.push(Span::styled("▐", base));
+        spans.push(Span::styled(" ", base));
         spans.push(Span::styled(format!("{}", i + 1), number));
         spans.push(Span::styled(":", number));
         spans.push(Span::styled(title, base));
@@ -138,10 +144,12 @@ pub fn render(f: &mut Frame, area: Rect, app: &mut App) {
         let close_style = if app.hover == HoverTarget::TabClose(i) {
             theme::tab_close_hover()
         } else {
-            base.fg(theme::RED)
+            base
         };
         spans.push(Span::styled("×", close_style));
-        spans.push(Span::styled("▌", base));
+        // A blue cell separates adjacent tabs rather than joining two
+        // differently coloured blocks edge to edge.
+        spans.push(Span::styled(" ", Style::new().bg(theme::BLUE)));
         x += w;
     }
 
@@ -167,7 +175,7 @@ pub fn render(f: &mut Frame, area: Rect, app: &mut App) {
             let style = if app.hover == HoverTarget::NewTab {
                 theme::tab_hover()
             } else {
-                theme::tab_idle()
+                Style::new().bg(theme::BLUE).fg(theme::GRAY)
             };
             f.render_widget(Paragraph::new(Span::styled(" + ", style)), rect);
         }

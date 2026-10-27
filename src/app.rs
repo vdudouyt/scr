@@ -223,7 +223,6 @@ impl App {
         self.active = self.tabs.len() - 1;
         self.selection = None;
         self.hover = HoverTarget::None;
-        self.flash(format!("Tab {} opened", self.active + 1));
         Ok(())
     }
 
@@ -266,9 +265,6 @@ impl App {
             return;
         }
         self.close_tab(self.active);
-        if !self.should_quit {
-            self.flash(format!("Tab {} closed", self.active + 1));
-        }
     }
 
     pub fn select_tab(&mut self, index: usize) {

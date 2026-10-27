@@ -116,7 +116,7 @@ time; `scr -d` detaches it.
 One row of chrome only:
 
 ```text
-▐1:bash ×▌▐2:vim ×▌ +                                                  work
+ 1:bash ×  2:vim ×  +                                            work · 2 tabs
 $ ls -la
 src  Cargo.toml  README.md
 $

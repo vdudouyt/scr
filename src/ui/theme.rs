@@ -40,9 +40,10 @@ pub fn faint() -> Style {
     Style::new().fg(DARK)
 }
 
-/// A tab that is not showing.
+/// A tab that is not showing: a quiet label on the blue bar, not a bright
+/// block competing with the active tab.
 pub fn tab_idle() -> Style {
-    Style::new().bg(GRAY).fg(BLACK)
+    Style::new().bg(BLUE).fg(GRAY)
 }
 /// A tab that is showing.
 pub fn tab_active() -> Style {
