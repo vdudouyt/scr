@@ -46,7 +46,7 @@ pub fn render(f: &mut Frame, area: Rect, app: &mut App) {
         .tabs
         .iter()
         .enumerate()
-        .map(|(i, t)| width_of(i + 1, &clip_title(&t.title, MAX_TITLE)))
+        .map(|(i, t)| width_of(i + 1, &clip_title(&t.session.title(), MAX_TITLE)))
         .collect();
     let n = widths.len();
     let active = app.active.min(n.saturating_sub(1));
@@ -71,7 +71,7 @@ pub fn render(f: &mut Frame, area: Rect, app: &mut App) {
         if max_w < 5 {
             break;
         }
-        let mut title = clip_title(&tab.title, MAX_TITLE);
+        let mut title = clip_title(&tab.session.title(), MAX_TITLE);
         let mut w = width_of(i + 1, &title);
         if w > max_w {
             let max_title = max_w.saturating_sub(5) as usize;
@@ -181,5 +181,14 @@ mod tests {
             let (s, e) = window(&widths, active, 23);
             assert!(s <= active && active < e);
         }
+    }
+
+    #[test]
+    fn titles_are_clipped_to_the_strip_limit() {
+        let long = "x".repeat(40);
+        let clipped = super::clip_title(&long, super::MAX_TITLE);
+        assert_eq!(clipped.chars().count(), super::MAX_TITLE);
+        assert!(clipped.ends_with('…'));
+        assert_eq!(super::clip_title("bash", super::MAX_TITLE), "bash");
     }
 }

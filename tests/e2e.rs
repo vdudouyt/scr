@@ -166,14 +166,15 @@ fn detach_reattach_tabs_and_kill_cleanup() {
     let name = env.name.clone();
 
     let mut ui = Ui::spawn(&env, &["-S", &name]);
-    ui.wait_for("1:bash", 8);
+    // The shell sets its own OSC title, so the tab number is what stays fixed.
+    ui.wait_for("1:", 8);
     ui.write(b"echo E2E_ONE\r");
     ui.wait_for("E2E_ONE", 8);
 
     // Ctrl+A c: a second tab, active.
     ui.ctrl('a');
     ui.write(b"c");
-    ui.wait_for("2:bash", 8);
+    ui.wait_for("2:", 8);
     ui.write(b"echo E2E_TWO\r");
     ui.wait_for("E2E_TWO", 8);
 
@@ -193,7 +194,7 @@ fn detach_reattach_tabs_and_kill_cleanup() {
     // Reattach and see the first tab's output again.
     let mut ui = Ui::spawn(&env, &["-r", &name]);
     ui.wait_for("E2E_ONE", 8);
-    ui.wait_for("2:bash", 8);
+    ui.wait_for("2:", 8);
 
     // Close both tabs; the last close ends the session.
     ui.ctrl('a');
@@ -211,7 +212,7 @@ fn detach_reattach_tabs_and_kill_cleanup() {
     let env2 = Env::new("kill");
     let name2 = env2.name.clone();
     let mut ui = Ui::spawn(&env2, &["-S", &name2]);
-    ui.wait_for("1:bash", 8);
+    ui.wait_for("1:", 8);
     ui.ctrl('a');
     ui.write(b"d");
     ui.wait_exit();
@@ -248,7 +249,7 @@ fn sigkill_restores_the_terminal_through_the_guardian() {
     let env = Env::new("guard");
     let name = env.name.clone();
     let mut ui = Ui::spawn(&env, &["-S", &name]);
-    ui.wait_for("1:bash", 8);
+    ui.wait_for("1:", 8);
     let pid = ui.child.process_id().expect("client pid") as i32;
     unsafe {
         libc::kill(pid, libc::SIGKILL);

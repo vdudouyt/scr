@@ -11,6 +11,37 @@ use std::sync::{Arc, Mutex};
 
 pub type SessionId = u64;
 
+/// The title a program in the tab asks the terminal to show (OSC 0 and OSC 2).
+/// The value lives here rather than on the screen so it survives reattach.
+#[derive(Clone, Default)]
+pub struct WindowTitles {
+    title: Arc<Mutex<Option<String>>>,
+}
+
+impl WindowTitles {
+    /// The program's title, or `None` when it has not set one (or cleared it).
+    fn get(&self) -> Option<String> {
+        self.title.lock().ok().and_then(|t| t.clone())
+    }
+}
+
+impl vt100::Callbacks for WindowTitles {
+    fn set_window_title(&mut self, _: &mut vt100::Screen, title: &[u8]) {
+        // Titles are single-line chrome: drop control characters and trim,
+        // and treat an empty title as "no title" so the spawn name comes back.
+        let decoded = String::from_utf8_lossy(title);
+        let cleaned: String = decoded.chars().filter(|c| !c.is_control()).collect();
+        let cleaned = cleaned.trim();
+        if let Ok(mut slot) = self.title.lock() {
+            *slot = if cleaned.is_empty() {
+                None
+            } else {
+                Some(cleaned.to_string())
+            };
+        }
+    }
+}
+
 /// What a session tells the event loop. Output is coalesced: the reader thread
 /// only sends `Output` on a clean->dirty transition, so `cat` of a large file
 /// cannot flood the channel.
@@ -42,11 +73,10 @@ impl Spawn {
 }
 
 pub struct TerminalSession {
-    /// The host nickname. Terminal-set titles are deliberately ignored so a tab
-    /// always reads as the host it connects to.
-    #[allow(dead_code)]
-    pub title: String,
-    parser: Arc<Mutex<vt100::Parser>>,
+    /// The name shown until the program sets a window title.
+    default_title: String,
+    titles: WindowTitles,
+    parser: Arc<Mutex<vt100::Parser<WindowTitles>>>,
     writer: Box<dyn Write + Send>,
     master: Box<dyn MasterPty + Send>,
     child: Box<dyn portable_pty::Child + Send + Sync>,
@@ -110,7 +140,13 @@ impl TerminalSession {
         // child and its descendants are gone.
         drop(pair.slave);
 
-        let parser = Arc::new(Mutex::new(vt100::Parser::new(rows, cols, scrollback)));
+        let titles = WindowTitles::default();
+        let parser = Arc::new(Mutex::new(vt100::Parser::new_with_callbacks(
+            rows,
+            cols,
+            scrollback,
+            titles.clone(),
+        )));
         let dirty = Arc::new(AtomicBool::new(true));
         let exited = Arc::new(AtomicBool::new(false));
 
@@ -128,7 +164,8 @@ impl TerminalSession {
         }
 
         Ok(TerminalSession {
-            title: title.into(),
+            default_title: title.into(),
+            titles,
             parser,
             writer,
             master: pair.master,
@@ -139,8 +176,16 @@ impl TerminalSession {
         })
     }
 
-    pub fn parser(&self) -> &Arc<Mutex<vt100::Parser>> {
+    pub fn parser(&self) -> &Arc<Mutex<vt100::Parser<WindowTitles>>> {
         &self.parser
+    }
+
+    /// The tab name: the program's own window title when it set one, otherwise
+    /// the name it was spawned under.
+    pub fn title(&self) -> String {
+        self.titles
+            .get()
+            .unwrap_or_else(|| self.default_title.clone())
     }
 
     #[allow(dead_code)]
@@ -238,7 +283,7 @@ fn sane_size((rows, cols): (u16, u16)) -> (u16, u16) {
 fn pump(
     id: SessionId,
     mut reader: Box<dyn std::io::Read + Send>,
-    parser: Arc<Mutex<vt100::Parser>>,
+    parser: Arc<Mutex<vt100::Parser<WindowTitles>>>,
     dirty: Arc<AtomicBool>,
     exited: Arc<AtomicBool>,
     tx: Sender<TermEvent>,
@@ -300,6 +345,67 @@ mod tests {
             contents(&s)
         );
         assert_eq!(s.size(), (24, 80));
+    }
+
+    #[test]
+    fn follows_the_window_title_the_program_sets() {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let mut spawn = Spawn::new("/bin/sh");
+        spawn.args = vec![
+            "-c".into(),
+            "printf '\\033]2;build logs\\007'; sleep 30".into(),
+        ];
+        let s =
+            TerminalSession::spawn(6, "sh", &spawn, (24, 80), 100, "xterm-256color", tx).unwrap();
+
+        assert!(
+            wait_for(&rx, || s.title() == "build logs"),
+            "title was {:?}",
+            s.title()
+        );
+    }
+
+    #[test]
+    fn an_empty_window_title_falls_back_to_the_spawn_name() {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let mut spawn = Spawn::new("/bin/sh");
+        spawn.args = vec![
+            "-c".into(),
+            "printf '\\033]2;temporary\\007'; sleep 0.3; printf '\\033]2;\\007'; sleep 30"
+                .into(),
+        ];
+        let s =
+            TerminalSession::spawn(7, "sh", &spawn, (24, 80), 100, "xterm-256color", tx).unwrap();
+
+        assert!(
+            wait_for(&rx, || s.title() == "temporary"),
+            "title was {:?}",
+            s.title()
+        );
+        assert!(
+            wait_for(&rx, || s.title() == "sh"),
+            "title was {:?} after clearing",
+            s.title()
+        );
+    }
+
+    #[test]
+    fn an_icon_name_is_not_a_window_title() {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let mut spawn = Spawn::new("/bin/sh");
+        spawn.args = vec![
+            "-c".into(),
+            "printf '\\033]1;icon name\\007'; sleep 0.3; echo ready; sleep 30".into(),
+        ];
+        let s =
+            TerminalSession::spawn(8, "sh", &spawn, (24, 80), 100, "xterm-256color", tx).unwrap();
+
+        assert!(
+            wait_for(&rx, || contents(&s).contains("ready")),
+            "never saw the output; screen was:\n{}",
+            contents(&s)
+        );
+        assert_eq!(s.title(), "sh", "OSC 1 must not rename the tab");
     }
 
     #[test]

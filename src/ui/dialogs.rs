@@ -36,7 +36,26 @@ pub fn inner(area: Rect) -> Rect {
 
 pub fn tab_picker(f: &mut Frame, screen: Rect, app: &mut App) {
     let n = app.tabs.len();
-    let w = 58.min(screen.width.saturating_sub(2)).max(24.min(screen.width));
+    let titles: Vec<(String, bool)> = app
+        .tabs
+        .iter()
+        .enumerate()
+        .map(|(i, t)| (t.session.title(), i == app.active))
+        .collect();
+    // Room for the longest title the programs have asked for, within the
+    // screen. The tab strip clips at MAX_TITLE; the picker shows it whole.
+    let longest = titles
+        .iter()
+        .map(|(title, _)| title.chars().count())
+        .max()
+        .unwrap_or(0)
+        .min(usize::from(u16::MAX)) as u16;
+    let w = longest
+        .saturating_add(n.to_string().len() as u16)
+        .saturating_add(8)
+        .max(58)
+        .min(screen.width.saturating_sub(2))
+        .max(24.min(screen.width));
     let h = (n as u16 + 6)
         .min(screen.height.saturating_sub(2))
         .max(7.min(screen.height));
@@ -55,12 +74,6 @@ pub fn tab_picker(f: &mut Frame, screen: Rect, app: &mut App) {
     if rows == 0 {
         return;
     }
-    let titles: Vec<(String, bool)> = app
-        .tabs
-        .iter()
-        .enumerate()
-        .map(|(i, t)| (t.title.clone(), i == app.active))
-        .collect();
     let cursor = app.tab_picker.as_ref().map(|p| p.cursor).unwrap_or(0).min(n.saturating_sub(1));
     let scroll = {
         let p = app.tab_picker.as_mut().expect("picker open");
@@ -87,7 +100,9 @@ pub fn tab_picker(f: &mut Frame, screen: Rect, app: &mut App) {
         };
         let (title, active) = &titles[i];
         let number = i + 1;
-        let avail = inside.width.saturating_sub(10) as usize;
+        let avail = inside
+            .width
+            .saturating_sub(4 + number.to_string().len() as u16) as usize;
         let title = clip(title, avail);
         // The tab that is showing is marked with a filled circle in a gutter,
         // the way OpenCode's model picker marks the current choice.

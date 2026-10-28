@@ -52,7 +52,6 @@ impl Regions {
 
 pub struct Tab {
     pub id: SessionId,
-    pub title: String,
     pub session: TerminalSession,
 }
 
@@ -165,7 +164,7 @@ impl App {
         let id = self.next_id;
         let session = TerminalSession::spawn(
             id,
-            title.clone(),
+            &title,
             &spawn,
             (rows, cols),
             self.scrollback,
@@ -173,11 +172,7 @@ impl App {
             self.term_tx.clone(),
         )
         .with_context(|| format!("start {title}"))?;
-        self.tabs.push(Tab {
-            id,
-            title,
-            session,
-        });
+        self.tabs.push(Tab { id, session });
         self.active = self.tabs.len() - 1;
         self.hover = HoverTarget::None;
         Ok(())
@@ -292,7 +287,7 @@ impl App {
                 .enumerate()
                 .map(|(i, t)| TabInfo {
                     index: i,
-                    title: t.title.clone(),
+                    title: t.session.title(),
                     active: i == self.active,
                     alive: !t.session.has_exited(),
                 })
