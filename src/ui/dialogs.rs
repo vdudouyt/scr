@@ -15,15 +15,16 @@ pub fn dialog(f: &mut Frame, area: Rect, title: &str) {
             .style(theme::dialog_bg()),
         Rect::new(
             area.x + 2,
-            area.y,
+            area.y + 1,
             area.width.saturating_sub(4),
             1,
         ),
     );
 }
 
-/// Content area inside a borderless dialog: two cells of horizontal padding,
-/// one title row and one blank separator row.
+/// Content area inside a borderless dialog: one blank row above the title, the
+/// title, one blank row, the rows, and the hint on the last row. The last row
+/// of `inner` is the hint, so the body ends one row above the dialog's bottom.
 pub fn inner(area: Rect) -> Rect {
     Rect::new(
         area.x + 2,
@@ -36,9 +37,9 @@ pub fn inner(area: Rect) -> Rect {
 pub fn tab_picker(f: &mut Frame, screen: Rect, app: &mut App) {
     let n = app.tabs.len();
     let w = 58.min(screen.width.saturating_sub(2)).max(24.min(screen.width));
-    let h = (n as u16 + 5)
+    let h = (n as u16 + 6)
         .min(screen.height.saturating_sub(2))
-        .max(6.min(screen.height));
+        .max(7.min(screen.height));
     if w == 0 || h == 0 {
         return;
     }
@@ -50,7 +51,7 @@ pub fn tab_picker(f: &mut Frame, screen: Rect, app: &mut App) {
     );
     dialog(f, rect, "Select Tab");
     let inside = inner(rect);
-    let rows = inside.height.saturating_sub(2) as usize;
+    let rows = inside.height.saturating_sub(1) as usize;
     if rows == 0 {
         return;
     }
@@ -102,7 +103,7 @@ pub fn tab_picker(f: &mut Frame, screen: Rect, app: &mut App) {
         );
     }
 
-    let hint_y = inside.y + inside.height.saturating_sub(1);
+    let hint_y = inside.y + inside.height.saturating_sub(2);
     f.render_widget(
         Paragraph::new(Line::from(vec![
             Span::styled("Enter", theme::key_hint()),
@@ -145,7 +146,7 @@ pub fn help(f: &mut Frame, screen: Rect, _app: &mut App) {
             break;
         }
         let line = Line::from(vec![
-            Span::styled(format!(" {:<12}", key), theme::key_hint()),
+            Span::styled(format!(" {:<14}", key), theme::key_hint()),
             Span::styled(*text, theme::dialog_bg()),
         ]);
         f.render_widget(
@@ -153,7 +154,7 @@ pub fn help(f: &mut Frame, screen: Rect, _app: &mut App) {
             Rect::new(inside.x, inside.y + i as u16, inside.width, 1),
         );
     }
-    let hint_y = inside.y + inside.height.saturating_sub(1);
+    let hint_y = inside.y + inside.height.saturating_sub(2);
     f.render_widget(
         Paragraph::new(Line::from(vec![
             Span::styled("Enter", theme::key_hint()),

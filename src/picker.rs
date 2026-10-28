@@ -148,7 +148,7 @@ fn draw(f: &mut ratatui::Frame, sessions: &[SessionInfo], state: &mut State) {
     let w = 74.min(screen.width.saturating_sub(2)).max(30.min(screen.width));
     let h = (sessions.len() as u16 + 6)
         .min(screen.height.saturating_sub(2))
-        .max(8.min(screen.height));
+        .max(9.min(screen.height));
     if w == 0 || h == 0 {
         return;
     }
@@ -160,7 +160,7 @@ fn draw(f: &mut ratatui::Frame, sessions: &[SessionInfo], state: &mut State) {
     );
     ui::dialogs::dialog(f, rect, "scr sessions");
     let inside = ui::dialogs::inner(rect);
-    let rows = inside.height.saturating_sub(3) as usize;
+    let rows = inside.height.saturating_sub(2) as usize;
     if rows == 0 {
         return;
     }
@@ -214,7 +214,7 @@ fn draw(f: &mut ratatui::Frame, sessions: &[SessionInfo], state: &mut State) {
         );
     }
 
-    let hint_y = inside.y + inside.height.saturating_sub(1);
+    let hint_y = inside.y + inside.height.saturating_sub(2);
     f.render_widget(
         Paragraph::new(Line::from(vec![
             Span::styled("Enter", theme::key_hint()),
