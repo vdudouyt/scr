@@ -7,12 +7,14 @@ use crate::term::session::{SessionId, Spawn, TermEvent, TerminalSession};
 use crate::ui;
 use anyhow::{Context, Result};
 use ratatui::crossterm::event::{
-    KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
+    Event, KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
 };
 use ratatui::layout::{Position, Rect};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::Sender;
 use std::time::{SystemTime, UNIX_EPOCH};
+use tui_input::Input;
+use tui_input::backend::crossterm::to_input_request;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Mode {
@@ -68,18 +70,12 @@ impl Tab {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct RenameState {
-    pub text: String,
-    /// Insertion point, counted in chars.
-    pub cursor: usize,
-}
-
 pub struct TabPickerState {
     pub cursor: usize,
     pub scroll: usize,
-    /// Some while the selected row is being renamed.
-    pub rename: Option<RenameState>,
+    /// Some while the selected row is being renamed. `tui-input` carries the
+    /// value and caret, and steps by grapheme.
+    pub rename: Option<Input>,
 }
 
 pub struct App {
@@ -502,7 +498,7 @@ impl App {
         let text = tab.title();
         let end = text.chars().count();
         if let Some(p) = self.tab_picker.as_mut() {
-            p.rename = Some(RenameState { text, cursor: end });
+            p.rename = Some(Input::new(text).with_cursor(end));
         }
     }
 
@@ -510,14 +506,14 @@ impl App {
         let Some(picker) = self.tab_picker.as_mut() else {
             return;
         };
-        let Some(mut rename) = picker.rename.take() else {
+        let Some(mut input) = picker.rename.take() else {
             return;
         };
         match key.code {
             // The first Esc leaves the field; a second one closes the list.
             KeyCode::Esc => return,
             KeyCode::Enter => {
-                let name = rename.text.trim();
+                let name = input.value().trim();
                 if let Some(tab) = self.tabs.get_mut(picker.cursor) {
                     tab.custom_title = if name.is_empty() {
                         None
@@ -527,37 +523,14 @@ impl App {
                 }
                 return;
             }
-            KeyCode::Backspace => {
-                if rename.cursor > 0 {
-                    let start = byte_index(&rename.text, rename.cursor - 1);
-                    let end = byte_index(&rename.text, rename.cursor);
-                    rename.text.replace_range(start..end, "");
-                    rename.cursor -= 1;
-                }
-            }
-            KeyCode::Delete => {
-                let start = byte_index(&rename.text, rename.cursor);
-                let end = byte_index(&rename.text, rename.cursor + 1);
-                if start < end {
-                    rename.text.replace_range(start..end, "");
-                }
-            }
-            KeyCode::Left => rename.cursor = rename.cursor.saturating_sub(1),
-            KeyCode::Right => {
-                rename.cursor = (rename.cursor + 1).min(rename.text.chars().count());
-            }
-            KeyCode::Home => rename.cursor = 0,
-            KeyCode::End => rename.cursor = rename.text.chars().count(),
-            KeyCode::Char(c)
-                if !key.modifiers.intersects(KeyModifiers::CONTROL | KeyModifiers::ALT) =>
-            {
-                let at = byte_index(&rename.text, rename.cursor);
-                rename.text.insert(at, c);
-                rename.cursor += 1;
-            }
             _ => {}
         }
-        picker.rename = Some(rename);
+        // Everything else is line editing: arrows, Home/End, word motions,
+        // backspace/delete and the readline kills, all handled by tui-input.
+        if let Some(request) = to_input_request(&Event::Key(key)) {
+            input.handle(request);
+        }
+        picker.rename = Some(input);
     }
 
     fn commit_tab_picker(&mut self) {
@@ -774,14 +747,6 @@ impl App {
 
 }
 
-/// Byte offset of a char index, clamped to the end of the string.
-fn byte_index(s: &str, char_index: usize) -> usize {
-    s.char_indices()
-        .nth(char_index)
-        .map(|(i, _)| i)
-        .unwrap_or(s.len())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -932,8 +897,8 @@ mod tests {
 
         // Prefilled with the name the tab showed, cursor at the end.
         let rename = a.tab_picker.as_ref().unwrap().rename.as_ref().unwrap();
-        assert_eq!(rename.text, "sh");
-        assert_eq!(rename.cursor, 2);
+        assert_eq!(rename.value(), "sh");
+        assert_eq!(rename.cursor(), 2);
 
         // Replace it: two backspaces, then type.
         a.on_key(key(KeyCode::Backspace));
@@ -983,7 +948,19 @@ mod tests {
         a.on_key(key(KeyCode::Char('?')));
 
         let rename = a.tab_picker.as_ref().unwrap().rename.as_ref().unwrap();
-        assert_eq!(rename.text, "!sh?");
-        assert_eq!(rename.cursor, 4);
+        assert_eq!(rename.value(), "!sh?");
+        assert_eq!(rename.cursor(), 4);
+    }
+
+    #[test]
+    fn the_editor_takes_readline_kills() {
+        let mut a = app();
+        a.open_tab_picker();
+        a.on_key(key(KeyCode::Char('e')));
+        a.on_key(ctrl('u'));
+
+        let rename = a.tab_picker.as_ref().unwrap().rename.as_ref().unwrap();
+        assert_eq!(rename.value(), "", "Ctrl+U clears the field");
+        assert_eq!(rename.cursor(), 0);
     }
 }

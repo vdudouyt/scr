@@ -103,26 +103,46 @@ pub fn tab_picker(f: &mut Frame, screen: Rect, app: &mut App) {
         let number = i + 1;
         let digits = number.to_string().len() as u16;
         let avail = inside.width.saturating_sub(4 + digits) as usize;
-        let editing = rename.is_some() && i == cursor;
-        let (title, cursor_col) = match rename {
-            Some(r) if editing => rename_window(&r.text, r.cursor, avail),
-            _ => (clip(title, avail), 0),
-        };
-        // The tab that is showing is marked with a filled circle in a gutter,
-        // the way OpenCode's model picker marks the current choice.
         let marker = if *active { "●" } else { " " };
-        // Named the way the tab strip names it: "1:bash", not a bare number.
-        let spans = vec![
-            Span::styled(format!(" {marker} "), row_style),
-            Span::styled(format!("{number}:{title}"), row_style),
-        ];
-        f.render_widget(
-            Paragraph::new(Line::from(spans)).style(row_style),
-            line_rect,
-        );
-        if editing {
-            let x = inside.x + 4 + digits + cursor_col;
-            f.set_cursor_position(Position::new(x, y));
+        if let Some(input) = rename.filter(|_| i == cursor) {
+            // Paint the selected row first: the gutter and the field are two
+            // widgets, so neither alone covers the whole line.
+            f.render_widget(Block::new().style(row_style), line_rect);
+            let gutter_w = 4 + digits;
+            f.render_widget(
+                Paragraph::new(Span::styled(
+                    format!(" {marker} {number}:"),
+                    row_style,
+                )),
+                Rect::new(inside.x, y, gutter_w, 1),
+            );
+            let field = Rect::new(inside.x + gutter_w, y, avail as u16, 1);
+            if avail > 0 {
+                // Follow the caret, leaving it one cell so it never sits
+                // flush against the edge of the field.
+                let scroll = input.visual_scroll(avail.saturating_sub(1));
+                f.render_widget(
+                    Paragraph::new(Line::styled(input.value().to_string(), row_style))
+                        .scroll((0, scroll as u16))
+                        .style(row_style),
+                    field,
+                );
+                let col = input.visual_cursor().saturating_sub(scroll) as u16;
+                f.set_cursor_position(Position::new(field.x + col, y));
+            }
+        } else {
+            let title = clip(title, avail);
+            // The tab that is showing is marked with a filled circle in a
+            // gutter, the way OpenCode's model picker marks the current choice.
+            // Named the way the tab strip names it: "1:bash", not a bare number.
+            let spans = vec![
+                Span::styled(format!(" {marker} "), row_style),
+                Span::styled(format!("{number}:{title}"), row_style),
+            ];
+            f.render_widget(
+                Paragraph::new(Line::from(spans)).style(row_style),
+                line_rect,
+            );
         }
     }
 
@@ -144,19 +164,6 @@ pub fn tab_picker(f: &mut Frame, screen: Rect, app: &mut App) {
         Paragraph::new(Line::from(hints)).style(theme::dialog_bg()),
         Rect::new(inside.x, hint_y, inside.width, 1),
     )
-}
-
-/// A one-line window over the rename buffer that keeps the insertion point
-/// visible when the name is wider than the dialog.
-fn rename_window(text: &str, cursor: usize, width: usize) -> (String, u16) {
-    if width == 0 {
-        return (String::new(), 0);
-    }
-    let chars: Vec<char> = text.chars().collect();
-    let cursor = cursor.min(chars.len());
-    let start = cursor.saturating_sub(width - 1);
-    let shown: String = chars[start..].iter().take(width).collect();
-    (shown, (cursor - start) as u16)
 }
 
 pub fn help(f: &mut Frame, screen: Rect, _app: &mut App) {
