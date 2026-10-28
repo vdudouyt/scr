@@ -11,6 +11,7 @@ use std::fs::{self, File, OpenOptions};
 use std::io::Write;
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::os::unix::net::UnixStream;
+use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
@@ -203,6 +204,9 @@ pub fn spawn_server(name: &str, command: &[String]) -> Result<()> {
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::from(log2))
+        // A group of its own keeps terminal-generated SIGHUP/SIGINT/SIGQUIT
+        // away from a daemon that holds no terminal descriptors.
+        .process_group(0)
         .spawn()
         .context("start session daemon")?;
 

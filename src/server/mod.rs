@@ -36,12 +36,9 @@ struct Client {
 
 pub fn run(name: String, initial: Vec<String>) -> Result<()> {
     session::validate_name(&name)?;
-    // A new session has no controlling terminal, so closing the attached
-    // client's terminal cannot SIGHUP the daemon. Rust itself ignores SIGPIPE.
-    unsafe {
-        libc::setsid();
-    }
-
+    // The daemon is started in its own process group by `session::spawn_server`,
+    // so terminal-generated SIGHUP/SIGINT/SIGQUIT never reach it. Rust itself
+    // ignores SIGPIPE.
     let lock = session::acquire_lock(&name)?;
     let dir = session::runtime_dir()?;
     let sock_path = dir.join(format!("{name}.sock"));

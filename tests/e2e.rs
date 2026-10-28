@@ -1,12 +1,17 @@
 //! End-to-end: a real client on a real PTY, a real daemon, detach/reattach,
 //! tabs, and the `kill -9` cleanup promise.
 
-use portable_pty::{CommandBuilder, PtySize, native_pty_system};
+use portable_pty::{CommandBuilder, MasterPty, PtySize, native_pty_system};
 use std::io::Write;
 use std::path::PathBuf;
 use std::process::Command;
 use std::sync::mpsc::{Receiver, channel};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+
+/// Tests only need the process gone, so go through `kill` and stay safe.
+fn kill9(pid: i32) {
+    let _ = Command::new("kill").args(["-9", &pid.to_string()]).status();
+}
 
 struct Env {
     dir: PathBuf,
@@ -67,9 +72,7 @@ impl Drop for Env {
         {
             for pid in String::from_utf8_lossy(&out.stdout).split_whitespace() {
                 if let Ok(pid) = pid.parse::<i32>() {
-                    unsafe {
-                        libc::kill(pid, libc::SIGKILL);
-                    }
+                    kill9(pid);
                 }
             }
         }
@@ -80,9 +83,12 @@ impl Drop for Env {
 struct Ui {
     child: Box<dyn portable_pty::Child + Send + Sync>,
     writer: Box<dyn Write + Send>,
+    master: Box<dyn MasterPty + Send>,
     rx: Receiver<Vec<u8>>,
     parser: vt100::Parser,
     raw: Vec<u8>,
+    /// The pty's modes before the client touched them, as a stable debug form.
+    sane_termios: String,
 }
 
 impl Ui {
@@ -95,6 +101,7 @@ impl Ui {
                 pixel_height: 0,
             })
             .unwrap();
+        let sane_termios = format!("{:?}", pair.master.get_termios());
         let mut cmd = env.command();
         cmd.args(args);
         let child = pair.slave.spawn_command(cmd).unwrap();
@@ -118,10 +125,16 @@ impl Ui {
         Ui {
             child,
             writer,
+            master: pair.master,
             rx,
             parser: vt100::Parser::new(24, 80, 2000),
             raw: Vec::new(),
+            sane_termios,
         }
+    }
+
+    fn termios(&self) -> String {
+        format!("{:?}", self.master.get_termios())
     }
 
     fn pump(&mut self) {
@@ -231,9 +244,7 @@ fn detach_reattach_tabs_and_kill_cleanup() {
         .expect("server pid")
         .parse()
         .unwrap();
-    unsafe {
-        libc::kill(pid, libc::SIGKILL);
-    }
+    kill9(pid);
     std::thread::sleep(Duration::from_millis(150));
     let listed = env2.list();
     assert!(
@@ -251,9 +262,7 @@ fn sigkill_restores_the_terminal_through_the_guardian() {
     let mut ui = Ui::spawn(&env, &["-S", &name]);
     ui.wait_for("1:", 8);
     let pid = ui.child.process_id().expect("client pid") as i32;
-    unsafe {
-        libc::kill(pid, libc::SIGKILL);
-    }
+    kill9(pid);
     let deadline = Instant::now() + Duration::from_secs(5);
     let marker = b"\x1b[?1049l";
     while Instant::now() < deadline {
@@ -270,6 +279,11 @@ fn sigkill_restores_the_terminal_through_the_guardian() {
     assert!(
         ui.raw.windows(8).any(|w| w == b"\x1b[?1003l"),
         "guardian never disabled mouse reporting"
+    );
+    assert_eq!(
+        ui.sane_termios,
+        ui.termios(),
+        "guardian never restored the terminal modes"
     );
     let _ = ui.child.wait();
 }

@@ -24,7 +24,13 @@ fn main() -> ExitCode {
 }
 
 fn run() -> Result<()> {
-    let command = cli::parse(std::env::args().skip(1).collect())?;
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    // Hidden fallback used when the `scr-guard` helper binary is unavailable.
+    if args.len() == 1 && args[0] == terminal::GUARD_ARG {
+        terminal::guard_main();
+        return Ok(());
+    }
+    let command = cli::parse(args)?;
     match command {
         Command::Help => {
             print!("{}", cli::USAGE);
