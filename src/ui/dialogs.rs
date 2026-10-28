@@ -85,15 +85,16 @@ pub fn tab_picker(f: &mut Frame, screen: Rect, app: &mut App) {
             theme::dialog_bg()
         };
         let (title, active) = &titles[i];
+        let number = i + 1;
         let avail = inside.width.saturating_sub(10) as usize;
         let title = clip(title, avail);
         // The tab that is showing is marked with a filled circle in a gutter,
         // the way OpenCode's model picker marks the current choice.
         let marker = if *active { "●" } else { " " };
+        // Named the way the tab strip names it: "1:bash", not a bare number.
         let spans = vec![
             Span::styled(format!(" {marker} "), row_style),
-            Span::styled(format!("{:>2}  ", i + 1), row_style),
-            Span::styled(title, row_style),
+            Span::styled(format!("{number}:{title}"), row_style),
         ];
         f.render_widget(
             Paragraph::new(Line::from(spans)).style(row_style),
