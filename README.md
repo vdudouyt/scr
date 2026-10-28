@@ -11,6 +11,8 @@ until the daemon ends.
 
 - Real detach/reattach, GNU Screen style (`Ctrl+A D`).
 - Mouse-accessible tabs: click to switch, `×` to close, `+` to create.
+- Tabs follow the window title the program sets (OSC 0/2); `e` in the tab
+  list renames one, and a manual name outranks later title changes.
 - Hover feedback on tabs, close buttons, `+`, dialog rows and buttons.
 - Full xterm key and mouse encoding: DECCKM arrows, modified keys, F1–F12,
   bracketed paste, SGR/X10 mouse protocols.
@@ -63,6 +65,7 @@ A session name defaults to the client's pid. `scr -S work` names one.
 | `Ctrl+A C` / `Ctrl+A c` | new tab |
 | `Ctrl+A D` / `Ctrl+A d` | detach |
 | `Ctrl+A "` | select a tab from a list |
+| `e` | in the tab list, rename the selected tab (empty clears) |
 | `Ctrl+A N` / `Ctrl+A P` | next / previous tab |
 | `Ctrl+A K` | close current tab |
 | `Ctrl+A 1…9` | jump to tab (0 is the tenth) |
