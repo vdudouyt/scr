@@ -3,7 +3,7 @@
 use crate::app::{App, HoverTarget};
 use crate::ui::theme;
 use ratatui::Frame;
-use ratatui::layout::Rect;
+use ratatui::layout::{Position, Rect};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Clear, Paragraph};
 
@@ -40,10 +40,10 @@ pub fn tab_picker(f: &mut Frame, screen: Rect, app: &mut App) {
         .tabs
         .iter()
         .enumerate()
-        .map(|(i, t)| (t.session.title(), i == app.active))
+        .map(|(i, t)| (t.title(), i == app.active))
         .collect();
-    // Room for the longest title the programs have asked for, within the
-    // screen. The tab strip clips at MAX_TITLE; the picker shows it whole.
+    // Room for the longest name, hand-set or program-set, within the screen.
+    // The tab strip clips at MAX_TITLE; the picker shows it whole.
     let longest = titles
         .iter()
         .map(|(title, _)| title.chars().count())
@@ -85,6 +85,7 @@ pub fn tab_picker(f: &mut Frame, screen: Rect, app: &mut App) {
         }
         p.scroll.min(n.saturating_sub(1))
     };
+    let rename = app.tab_picker.as_ref().and_then(|p| p.rename.as_ref());
     for (row, i) in (scroll..n.min(scroll + rows)).enumerate() {
         let y = inside.y + row as u16;
         let line_rect = Rect::new(inside.x, y, inside.width, 1);
@@ -100,10 +101,13 @@ pub fn tab_picker(f: &mut Frame, screen: Rect, app: &mut App) {
         };
         let (title, active) = &titles[i];
         let number = i + 1;
-        let avail = inside
-            .width
-            .saturating_sub(4 + number.to_string().len() as u16) as usize;
-        let title = clip(title, avail);
+        let digits = number.to_string().len() as u16;
+        let avail = inside.width.saturating_sub(4 + digits) as usize;
+        let editing = rename.is_some() && i == cursor;
+        let (title, cursor_col) = match rename {
+            Some(r) if editing => rename_window(&r.text, r.cursor, avail),
+            _ => (clip(title, avail), 0),
+        };
         // The tab that is showing is marked with a filled circle in a gutter,
         // the way OpenCode's model picker marks the current choice.
         let marker = if *active { "●" } else { " " };
@@ -116,24 +120,48 @@ pub fn tab_picker(f: &mut Frame, screen: Rect, app: &mut App) {
             Paragraph::new(Line::from(spans)).style(row_style),
             line_rect,
         );
+        if editing {
+            let x = inside.x + 4 + digits + cursor_col;
+            f.set_cursor_position(Position::new(x, y));
+        }
     }
 
     let hint_y = inside.y + inside.height.saturating_sub(2);
+    let mut hints = vec![
+        Span::styled("Enter", theme::key_hint()),
+        Span::styled(
+            if rename.is_some() { " save    " } else { " goto    " },
+            theme::dialog_muted(),
+        ),
+    ];
+    if rename.is_none() {
+        hints.push(Span::styled("e", theme::dialog_bg().fg(theme::FG)));
+        hints.push(Span::styled(" rename    ", theme::dialog_muted()));
+    }
+    hints.push(Span::styled("Esc", theme::dialog_bg().fg(theme::FG)));
+    hints.push(Span::styled(" cancel", theme::dialog_muted()));
     f.render_widget(
-        Paragraph::new(Line::from(vec![
-            Span::styled("Enter", theme::key_hint()),
-            Span::styled(" goto    ", theme::dialog_muted()),
-            Span::styled("Esc", theme::dialog_bg().fg(theme::FG)),
-            Span::styled(" cancel", theme::dialog_muted()),
-        ]))
-        .style(theme::dialog_bg()),
+        Paragraph::new(Line::from(hints)).style(theme::dialog_bg()),
         Rect::new(inside.x, hint_y, inside.width, 1),
     )
 }
 
+/// A one-line window over the rename buffer that keeps the insertion point
+/// visible when the name is wider than the dialog.
+fn rename_window(text: &str, cursor: usize, width: usize) -> (String, u16) {
+    if width == 0 {
+        return (String::new(), 0);
+    }
+    let chars: Vec<char> = text.chars().collect();
+    let cursor = cursor.min(chars.len());
+    let start = cursor.saturating_sub(width - 1);
+    let shown: String = chars[start..].iter().take(width).collect();
+    (shown, (cursor - start) as u16)
+}
+
 pub fn help(f: &mut Frame, screen: Rect, _app: &mut App) {
     let w = 62.min(screen.width.saturating_sub(2)).max(30.min(screen.width));
-    let h = 13.min(screen.height.saturating_sub(2)).max(9.min(screen.height));
+    let h = 14.min(screen.height.saturating_sub(2)).max(10.min(screen.height));
     if w == 0 || h == 0 {
         return;
     }
@@ -149,6 +177,7 @@ pub fn help(f: &mut Frame, screen: Rect, _app: &mut App) {
         ("Ctrl+A C", "Open a new tab"),
         ("Ctrl+A D", "Detach from this session"),
         ("Ctrl+A \"", "Select a tab from a list"),
+        ("e", "Rename the selected tab (empty clears)"),
         ("Ctrl+A N / P", "Next / previous tab"),
         ("Ctrl+A K", "Close the current tab"),
         ("Alt+← / →", "Next / previous tab"),

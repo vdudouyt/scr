@@ -256,6 +256,54 @@ fn detach_reattach_tabs_and_kill_cleanup() {
 }
 
 #[test]
+fn a_renamed_tab_outranks_the_programs_title() {
+    let env = Env::new("rename");
+    let name = env.name.clone();
+    let mut ui = Ui::spawn(&env, &["-S", &name]);
+    ui.wait_for("1:", 8);
+
+    ui.ctrl('a');
+    ui.write(b"\"");
+    ui.wait_for("e rename", 8);
+    ui.write(b"e");
+    for _ in 0..200 {
+        ui.write(&[0x7f]);
+    }
+    ui.write(b"mine\r");
+    ui.write(b"\x1b");
+    ui.wait_for("1:mine", 8);
+
+    // A new prompt asks the shell to set its own title again; the manual name
+    // must win.
+    ui.write(b"\r");
+    std::thread::sleep(Duration::from_millis(700));
+    ui.pump();
+    let header = ui
+        .parser
+        .screen()
+        .contents()
+        .lines()
+        .next()
+        .unwrap_or("")
+        .to_string();
+    assert!(header.contains("1:mine"), "header was {header:?}");
+    assert!(
+        !header.contains('@'),
+        "the program's title leaked into the header: {header:?}"
+    );
+
+    // And it survives detach and reattach.
+    ui.ctrl('a');
+    ui.write(b"d");
+    ui.wait_exit();
+    let mut ui = Ui::spawn(&env, &["-r", &name]);
+    ui.wait_for("1:mine", 8);
+    ui.ctrl('a');
+    ui.write(b"k");
+    ui.wait_exit();
+}
+
+#[test]
 fn sigkill_restores_the_terminal_through_the_guardian() {
     let env = Env::new("guard");
     let name = env.name.clone();

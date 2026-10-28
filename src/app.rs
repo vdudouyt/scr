@@ -53,11 +53,33 @@ impl Regions {
 pub struct Tab {
     pub id: SessionId,
     pub session: TerminalSession,
+    /// A name the user typed in the tab picker. It outranks the program's own
+    /// window title until the user clears it.
+    pub custom_title: Option<String>,
+}
+
+impl Tab {
+    /// The tab name: a manual override, else the program's window title, else
+    /// the name it was spawned under.
+    pub fn title(&self) -> String {
+        self.custom_title
+            .clone()
+            .unwrap_or_else(|| self.session.title())
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct RenameState {
+    pub text: String,
+    /// Insertion point, counted in chars.
+    pub cursor: usize,
 }
 
 pub struct TabPickerState {
     pub cursor: usize,
     pub scroll: usize,
+    /// Some while the selected row is being renamed.
+    pub rename: Option<RenameState>,
 }
 
 pub struct App {
@@ -172,7 +194,11 @@ impl App {
             self.term_tx.clone(),
         )
         .with_context(|| format!("start {title}"))?;
-        self.tabs.push(Tab { id, session });
+        self.tabs.push(Tab {
+            id,
+            session,
+            custom_title: None,
+        });
         self.active = self.tabs.len() - 1;
         self.hover = HoverTarget::None;
         Ok(())
@@ -287,7 +313,7 @@ impl App {
                 .enumerate()
                 .map(|(i, t)| TabInfo {
                     index: i,
-                    title: t.session.title(),
+                    title: t.title(),
                     active: i == self.active,
                     alive: !t.session.has_exited(),
                 })
@@ -417,6 +443,7 @@ impl App {
         self.tab_picker = Some(TabPickerState {
             cursor: self.active,
             scroll: 0,
+            rename: None,
         });
         self.mode = Mode::TabPicker;
     }
@@ -424,6 +451,10 @@ impl App {
     fn key_tab_picker(&mut self, key: KeyEvent) {
         if self.tab_picker.is_none() {
             self.mode = Mode::Normal;
+            return;
+        }
+        if self.tab_picker.as_ref().is_some_and(|p| p.rename.is_some()) {
+            self.key_rename(key);
             return;
         }
         let n = self.tabs.len();
@@ -437,6 +468,12 @@ impl App {
             }
             KeyCode::Enter => {
                 self.commit_tab_picker();
+                return;
+            }
+            KeyCode::Char('e')
+                if !key.modifiers.intersects(KeyModifiers::CONTROL | KeyModifiers::ALT) =>
+            {
+                self.start_rename();
                 return;
             }
             KeyCode::Up => next = cursor.saturating_sub(1),
@@ -454,6 +491,73 @@ impl App {
         if let Some(p) = self.tab_picker.as_mut() {
             p.cursor = next;
         }
+    }
+
+    /// Edit the selected tab's name, starting from what it shows now.
+    fn start_rename(&mut self) {
+        let cursor = self.tab_picker.as_ref().map(|p| p.cursor).unwrap_or(0);
+        let Some(tab) = self.tabs.get(cursor) else {
+            return;
+        };
+        let text = tab.title();
+        let end = text.chars().count();
+        if let Some(p) = self.tab_picker.as_mut() {
+            p.rename = Some(RenameState { text, cursor: end });
+        }
+    }
+
+    fn key_rename(&mut self, key: KeyEvent) {
+        let Some(picker) = self.tab_picker.as_mut() else {
+            return;
+        };
+        let Some(mut rename) = picker.rename.take() else {
+            return;
+        };
+        match key.code {
+            // The first Esc leaves the field; a second one closes the list.
+            KeyCode::Esc => return,
+            KeyCode::Enter => {
+                let name = rename.text.trim();
+                if let Some(tab) = self.tabs.get_mut(picker.cursor) {
+                    tab.custom_title = if name.is_empty() {
+                        None
+                    } else {
+                        Some(name.to_string())
+                    };
+                }
+                return;
+            }
+            KeyCode::Backspace => {
+                if rename.cursor > 0 {
+                    let start = byte_index(&rename.text, rename.cursor - 1);
+                    let end = byte_index(&rename.text, rename.cursor);
+                    rename.text.replace_range(start..end, "");
+                    rename.cursor -= 1;
+                }
+            }
+            KeyCode::Delete => {
+                let start = byte_index(&rename.text, rename.cursor);
+                let end = byte_index(&rename.text, rename.cursor + 1);
+                if start < end {
+                    rename.text.replace_range(start..end, "");
+                }
+            }
+            KeyCode::Left => rename.cursor = rename.cursor.saturating_sub(1),
+            KeyCode::Right => {
+                rename.cursor = (rename.cursor + 1).min(rename.text.chars().count());
+            }
+            KeyCode::Home => rename.cursor = 0,
+            KeyCode::End => rename.cursor = rename.text.chars().count(),
+            KeyCode::Char(c)
+                if !key.modifiers.intersects(KeyModifiers::CONTROL | KeyModifiers::ALT) =>
+            {
+                let at = byte_index(&rename.text, rename.cursor);
+                rename.text.insert(at, c);
+                rename.cursor += 1;
+            }
+            _ => {}
+        }
+        picker.rename = Some(rename);
     }
 
     fn commit_tab_picker(&mut self) {
@@ -648,6 +752,16 @@ impl App {
         if ev.kind != MouseEventKind::Down(MouseButton::Left) {
             return;
         }
+        // While editing a name, stray clicks must not attach and throw the
+        // edit away.
+        if self.mode == Mode::TabPicker
+            && self
+                .tab_picker
+                .as_ref()
+                .is_some_and(|p| p.rename.is_some())
+        {
+            return;
+        }
         if self.mode == Mode::TabPicker
             && let HoverTarget::DialogRow(i) = self.hit_test(at)
         {
@@ -658,6 +772,14 @@ impl App {
         }
     }
 
+}
+
+/// Byte offset of a char index, clamped to the end of the string.
+fn byte_index(s: &str, char_index: usize) -> usize {
+    s.char_indices()
+        .nth(char_index)
+        .map(|(i, _)| i)
+        .unwrap_or(s.len())
 }
 
 #[cfg(test)]
@@ -796,5 +918,72 @@ mod tests {
             term.backend().buffer()[(plus.x, 0)].bg,
             theme::BG_HOVER_LIGHT
         );
+    }
+
+    fn key(code: KeyCode) -> KeyEvent {
+        KeyEvent::new(code, KeyModifiers::empty())
+    }
+
+    #[test]
+    fn a_renamed_tab_keeps_its_name() {
+        let mut a = app();
+        a.open_tab_picker();
+        a.on_key(key(KeyCode::Char('e')));
+
+        // Prefilled with the name the tab showed, cursor at the end.
+        let rename = a.tab_picker.as_ref().unwrap().rename.as_ref().unwrap();
+        assert_eq!(rename.text, "sh");
+        assert_eq!(rename.cursor, 2);
+
+        // Replace it: two backspaces, then type.
+        a.on_key(key(KeyCode::Backspace));
+        a.on_key(key(KeyCode::Backspace));
+        for c in "build logs".chars() {
+            a.on_key(key(KeyCode::Char(c)));
+        }
+        a.on_key(key(KeyCode::Enter));
+
+        assert_eq!(a.tabs[0].custom_title.as_deref(), Some("build logs"));
+        assert_eq!(a.tabs[0].title(), "build logs");
+        assert!(a.tab_picker.as_ref().unwrap().rename.is_none());
+    }
+
+    #[test]
+    fn escape_drops_an_edit_and_empty_clears_the_override() {
+        let mut a = app();
+        a.tabs[0].custom_title = Some("pinned".into());
+
+        a.open_tab_picker();
+        a.on_key(key(KeyCode::Char('e')));
+        a.on_key(key(KeyCode::Backspace));
+        a.on_key(key(KeyCode::Char('x')));
+        a.on_key(key(KeyCode::Esc));
+        assert_eq!(a.tabs[0].title(), "pinned");
+        assert!(a.tab_picker.as_ref().unwrap().rename.is_none());
+        assert_eq!(a.mode, Mode::TabPicker, "Esc only ends the edit");
+
+        // An empty name drops the override and the program's title returns.
+        a.on_key(key(KeyCode::Char('e')));
+        for _ in 0.."pinned".len() {
+            a.on_key(key(KeyCode::Backspace));
+        }
+        a.on_key(key(KeyCode::Enter));
+        assert_eq!(a.tabs[0].custom_title, None);
+        assert_eq!(a.tabs[0].title(), "sh");
+    }
+
+    #[test]
+    fn the_insertion_point_moves_between_characters() {
+        let mut a = app();
+        a.open_tab_picker();
+        a.on_key(key(KeyCode::Char('e')));
+        a.on_key(key(KeyCode::Home));
+        a.on_key(key(KeyCode::Char('!')));
+        a.on_key(key(KeyCode::End));
+        a.on_key(key(KeyCode::Char('?')));
+
+        let rename = a.tab_picker.as_ref().unwrap().rename.as_ref().unwrap();
+        assert_eq!(rename.text, "!sh?");
+        assert_eq!(rename.cursor, 4);
     }
 }

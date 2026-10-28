@@ -46,7 +46,7 @@ pub fn render(f: &mut Frame, area: Rect, app: &mut App) {
         .tabs
         .iter()
         .enumerate()
-        .map(|(i, t)| width_of(i + 1, &clip_title(&t.session.title(), MAX_TITLE)))
+        .map(|(i, t)| width_of(i + 1, &clip_title(&t.title(), MAX_TITLE)))
         .collect();
     let n = widths.len();
     let active = app.active.min(n.saturating_sub(1));
@@ -71,7 +71,7 @@ pub fn render(f: &mut Frame, area: Rect, app: &mut App) {
         if max_w < 5 {
             break;
         }
-        let mut title = clip_title(&tab.session.title(), MAX_TITLE);
+        let mut title = clip_title(&tab.title(), MAX_TITLE);
         let mut w = width_of(i + 1, &title);
         if w > max_w {
             let max_title = max_w.saturating_sub(5) as usize;
