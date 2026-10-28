@@ -270,7 +270,6 @@ fn a_renamed_tab_outranks_the_programs_title() {
         ui.write(&[0x7f]);
     }
     ui.write(b"mine\r");
-    ui.write(b"\x1b");
     ui.wait_for("1:mine", 8);
 
     // A new prompt asks the shell to set its own title again; the manual name

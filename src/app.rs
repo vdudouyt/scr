@@ -503,10 +503,11 @@ impl App {
     }
 
     fn key_rename(&mut self, key: KeyEvent) {
-        let Some(picker) = self.tab_picker.as_mut() else {
-            return;
-        };
-        let Some(mut input) = picker.rename.take() else {
+        let Some((cursor, mut input)) = self
+            .tab_picker
+            .as_mut()
+            .and_then(|picker| picker.rename.take().map(|input| (picker.cursor, input)))
+        else {
             return;
         };
         match key.code {
@@ -514,13 +515,15 @@ impl App {
             KeyCode::Esc => return,
             KeyCode::Enter => {
                 let name = input.value().trim();
-                if let Some(tab) = self.tabs.get_mut(picker.cursor) {
+                if let Some(tab) = self.tabs.get_mut(cursor) {
                     tab.custom_title = if name.is_empty() {
                         None
                     } else {
                         Some(name.to_string())
                     };
                 }
+                // Saving a name also means "take me to that tab".
+                self.commit_tab_picker();
                 return;
             }
             _ => {}
@@ -530,7 +533,9 @@ impl App {
         if let Some(request) = to_input_request(&Event::Key(key)) {
             input.handle(request);
         }
-        picker.rename = Some(input);
+        if let Some(picker) = self.tab_picker.as_mut() {
+            picker.rename = Some(input);
+        }
     }
 
     fn commit_tab_picker(&mut self) {
@@ -910,7 +915,10 @@ mod tests {
 
         assert_eq!(a.tabs[0].custom_title.as_deref(), Some("build logs"));
         assert_eq!(a.tabs[0].title(), "build logs");
-        assert!(a.tab_picker.as_ref().unwrap().rename.is_none());
+        // Saving takes the picker's selection too.
+        assert!(a.tab_picker.is_none());
+        assert_eq!(a.mode, Mode::Normal);
+        assert_eq!(a.active, 0);
     }
 
     #[test]
