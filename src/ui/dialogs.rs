@@ -85,14 +85,13 @@ pub fn tab_picker(f: &mut Frame, screen: Rect, app: &mut App) {
             theme::dialog_bg()
         };
         let (title, active) = &titles[i];
-        let avail = inside.width.saturating_sub(10) as usize;
+        let avail = inside.width.saturating_sub(6) as usize;
         let title = clip(title, avail);
         // The tab that is showing is marked with a filled circle in a gutter,
         // the way OpenCode's model picker marks the current choice.
         let marker = if *active { "●" } else { " " };
         let spans = vec![
             Span::styled(format!(" {marker} "), row_style),
-            Span::styled(format!("{:>2}  ", i + 1), row_style),
             Span::styled(title, row_style),
         ];
         f.render_widget(
