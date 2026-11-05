@@ -200,7 +200,6 @@ fn event_loop(app: &mut App, rx: Receiver<Event>, event_tx: Sender<Event>) -> Re
                         app.hover = crate::app::HoverTarget::None;
                         app.prefix = false;
                     }
-                    ClientMsg::Detach => app.detach_requested = true,
                     ClientMsg::Probe | ClientMsg::Attach { .. } => {}
                 }
                 if redraw {
@@ -256,13 +255,6 @@ fn handle_conn(
         ClientMsg::Probe => {
             let _ = proto::write_json(&mut stream, TAG_INFO, &app.info(client.is_some()));
         }
-        ClientMsg::Detach => {
-            if client.is_some() {
-                detach_client(client);
-            }
-            let _ = proto::write_json(&mut stream, TAG_INFO, &app.info(false));
-            *dirty = true;
-        }
         ClientMsg::Attach { version, cols, rows } => {
             if version != proto::PROTO_VERSION {
                 let _ = send_text(
@@ -272,16 +264,11 @@ fn handle_conn(
                 );
                 return;
             }
+            // One client at a time: a new attach takes the session over and
+            // detaches whoever was attached before.
             if client.is_some() {
-                let _ = send_text(
-                    &mut stream,
-                    TAG_ERROR,
-                    &format!(
-                        "session {} is attached. Detach it with: scr -d {}",
-                        app.name, app.name
-                    ),
-                );
-                return;
+                detach_client(client);
+                app.detach_requested = false;
             }
             let cols = cols.max(1);
             let rows = rows.max(1);

@@ -10,7 +10,6 @@ pub enum Command {
     New { name: Option<String>, command: Vec<String> },
     Resume { name: Option<String> },
     List,
-    Detach { name: Option<String>, then_attach: bool },
     Help,
     Version,
 }
@@ -21,11 +20,11 @@ scr — a lightweight, detachable GNU Screen replacement
 USAGE:
     scr                       new session, then attach
     scr <command> [args…]     new session running a command
-    scr -S <name>             new named session
+    scr -S <name>             new named session, or attach if it exists
     scr -r [name]             resume a session; no name opens the picker
     scr -ls                   list sessions
-    scr -d [name]             detach a session
-    scr -dr <name>            detach, then attach
+
+Attaching to a session that is already attached detaches the other client.
 
 KEYS:
     Ctrl+A C      new tab            Ctrl+A D      detach
@@ -50,9 +49,7 @@ pub fn parse(args: Vec<String>) -> Result<Command> {
     }
 
     let mut resume = false;
-    let mut detach = false;
     let mut list = false;
-    let mut then_attach = false;
     let mut name: Option<String> = None;
     let mut command: Vec<String> = Vec::new();
     let mut stop = false;
@@ -70,12 +67,6 @@ pub fn parse(args: Vec<String>) -> Result<Command> {
             "-v" | "--version" => return Ok(Command::Version),
             "-ls" | "--list" | "-list" => list = true,
             "-r" | "--resume" => resume = true,
-            "-d" | "--detach" => detach = true,
-            "-dr" | "--detach-resume" => {
-                detach = true;
-                resume = true;
-                then_attach = true;
-            }
             "-S" | "--session-name" => {
                 i += 1;
                 let Some(value) = args.get(i) else {
@@ -85,9 +76,9 @@ pub fn parse(args: Vec<String>) -> Result<Command> {
             }
             s if s.starts_with('-') => bail!("unknown option {s}; try scr --help"),
             _ => {
-                if (resume || detach) && name.is_none() {
+                if resume && name.is_none() {
                     name = Some(arg.clone());
-                } else if (resume || detach) && !command.is_empty() {
+                } else if resume && !command.is_empty() {
                     bail!("unexpected argument {arg}");
                 } else {
                     command.push(arg.clone());
@@ -98,16 +89,10 @@ pub fn parse(args: Vec<String>) -> Result<Command> {
     }
 
     if list {
-        if resume || detach || !command.is_empty() {
+        if resume || !command.is_empty() {
             bail!("-ls cannot be combined with other actions");
         }
         return Ok(Command::List);
-    }
-    if detach {
-        if !command.is_empty() {
-            bail!("-d does not take a command");
-        }
-        return Ok(Command::Detach { name, then_attach });
     }
     if resume {
         if !command.is_empty() {
@@ -160,7 +145,7 @@ mod tests {
     }
 
     #[test]
-    fn named_and_detach_flags_parse() {
+    fn named_sessions_and_commands_parse() {
         assert_eq!(
             p(&["-S", "work"]),
             Command::New {
@@ -169,12 +154,18 @@ mod tests {
             }
         );
         assert_eq!(
-            p(&["-dr", "work"]),
-            Command::Detach {
+            p(&["-S", "work", "htop"]),
+            Command::New {
                 name: Some("work".into()),
-                then_attach: true
+                command: vec!["htop".into()]
             }
         );
+    }
+
+    #[test]
+    fn removed_detach_flags_are_unknown() {
+        assert!(parse(vec!["-d".into(), "work".into()]).is_err());
+        assert!(parse(vec!["-dr".into(), "work".into()]).is_err());
     }
 
     #[test]

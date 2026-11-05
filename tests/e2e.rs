@@ -256,6 +256,44 @@ fn detach_reattach_tabs_and_kill_cleanup() {
 }
 
 #[test]
+fn attaching_takes_over_an_already_attached_session() {
+    let env = Env::new("takeover");
+    let name = env.name.clone();
+
+    let mut first = Ui::spawn(&env, &["-S", &name]);
+    first.wait_for("1:", 8);
+    first.write(b"echo E2E_TAKEOVER\r");
+    first.wait_for("E2E_TAKEOVER", 8);
+
+    // `scr -r` on an attached session takes it over; the old client exits.
+    let mut second = Ui::spawn(&env, &["-r", &name]);
+    second.wait_for("E2E_TAKEOVER", 8);
+    first.wait_exit();
+
+    // `scr -S` on the same attached session behaves the same way.
+    let mut third = Ui::spawn(&env, &["-S", &name]);
+    third.wait_for("E2E_TAKEOVER", 8);
+    second.wait_exit();
+
+    // And on a detached session, `-S` attaches instead of starting a daemon.
+    third.ctrl('a');
+    third.write(b"d");
+    third.wait_exit();
+    let listed = env.list();
+    assert!(
+        listed.contains(&name) && listed.contains("detached"),
+        "listing was:\n{listed}"
+    );
+
+    let mut fourth = Ui::spawn(&env, &["-S", &name]);
+    fourth.wait_for("E2E_TAKEOVER", 8);
+    fourth.ctrl('a');
+    fourth.write(b"k");
+    fourth.wait_exit();
+    assert!(env.list().contains("No sessions"));
+}
+
+#[test]
 fn a_renamed_tab_outranks_the_programs_title() {
     let env = Env::new("rename");
     let name = env.name.clone();

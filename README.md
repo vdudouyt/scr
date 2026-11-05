@@ -45,18 +45,17 @@ re-export, exactly as OpenAdmin does.
 ```text
 scr                       new session, then attach
 scr <command> [args…]     new session running a command
-scr -S <name>             new named session
+scr -S <name>             new named session, or attach if it already exists
 scr -r [name]             resume a session; no name opens the picker
 scr -ls                   list sessions
-scr -d [name]             detach a session
-scr -dr <name>            detach, then attach
 scr --help                keys and options
 ```
 
-With zero sessions, `scr -r` says so. With one detached session it attaches
-directly, like GNU Screen. With several it opens the session picker.
+With zero sessions, `scr -r` says so. With one session it attaches directly,
+like GNU Screen. With several it opens the session picker.
 
-A session name defaults to the client's pid. `scr -S work` names one.
+A session name defaults to the client's pid. `scr -S work` names one. Naming an
+existing session reuses it instead of starting a second daemon.
 
 ## Keys
 
@@ -112,7 +111,9 @@ session terminated.
 
 The daemon is started in its own process group and holds no terminal
 descriptors, so closing the attaching terminal does not end the session. One
-client can be attached at a time; `scr -d` detaches it.
+client can be attached at a time: attaching to a session that is already
+attached detaches the other client and hands the session over. `Ctrl+A D`
+detaches from inside the client.
 
 The client runs on the alternate screen. A tiny `scr-guard` process snapshots
 the original termios before raw mode starts and then waits on a pipe. If the

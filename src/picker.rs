@@ -23,7 +23,6 @@ struct State {
     cursor: usize,
     scroll: usize,
     hover: Hover,
-    message: Option<String>,
     rows: Vec<(Rect, usize)>,
     last_click: Option<(Instant, usize)>,
 }
@@ -37,7 +36,6 @@ pub fn pick(sessions: Vec<SessionInfo>) -> Result<Option<String>> {
         cursor: 0,
         scroll: 0,
         hover: Hover::None,
-        message: None,
         rows: Vec::new(),
         last_click: None,
     };
@@ -116,17 +114,7 @@ pub fn pick(sessions: Vec<SessionInfo>) -> Result<Option<String>> {
 }
 
 fn choose(sessions: &[SessionInfo], state: &mut State) -> Option<String> {
-    let Some(s) = sessions.get(state.cursor) else {
-        return None;
-    };
-    if s.attached {
-        state.message = Some(format!(
-            "{} is attached — detach it with: scr -d {}",
-            s.name, s.name
-        ));
-        return None;
-    }
-    Some(s.name.clone())
+    sessions.get(state.cursor).map(|s| s.name.clone())
 }
 
 fn hit(state: &State, at: Position) -> Hover {
@@ -200,17 +188,6 @@ fn draw(f: &mut ratatui::Frame, sessions: &[SessionInfo], state: &mut State) {
         f.render_widget(
             Paragraph::new(Line::from(spans)).style(base),
             line_rect,
-        );
-    }
-
-    if let Some(msg) = state.message.as_deref() {
-        let msg_y = inside.y + inside.height.saturating_sub(2);
-        f.render_widget(
-            Paragraph::new(Span::styled(
-                format!(" {msg}"),
-                theme::dialog_bg().fg(theme::FG_BRIGHT),
-            )),
-            Rect::new(inside.x, msg_y, inside.width, 1),
         );
     }
 

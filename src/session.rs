@@ -234,17 +234,6 @@ pub fn spawn_server(name: &str, command: &[String]) -> Result<()> {
     bail!("session daemon did not start within 4 seconds");
 }
 
-pub fn detach_session(name: &str) -> Result<()> {
-    let mut stream = connect(name)?;
-    proto::write_json(&mut stream, proto::TAG_JSON, &ClientMsg::Detach)
-        .context("ask the session to detach")?;
-    let _ = stream.set_read_timeout(Some(Duration::from_millis(700)));
-    // The daemon replies with its current info after detaching, which also
-    // tells us it noticed the request.
-    let _ = proto::read_frame(&mut stream);
-    Ok(())
-}
-
 /// Write a fatal daemon error where the operator can find it.
 pub fn log_error(name: &str, error: &anyhow::Error) {
     if let Ok(dir) = runtime_dir() {

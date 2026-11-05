@@ -102,7 +102,6 @@ pub enum ClientMsg {
     Paste(String),
     Resize { cols: u16, rows: u16 },
     FocusLost,
-    Detach,
 }
 
 impl KeyMsg {
