@@ -27,13 +27,8 @@ until the daemon ends.
 
 ```sh
 cargo build --release
-install -m755 target/release/scr target/release/scr-guard ~/.local/bin/
+install -m755 target/release/scr ~/.local/bin/
 ```
-
-`scr-guard` must be installed next to `scr`. If it is missing (for example with
-`cargo run`, which builds only the main binary), `scr` falls back to a built-in
-guardian mode, which still restores the terminal but is visible to
-`killall scr`.
 
 The project uses the same ratatui/tui-term/portable-pty/vt100 versions as the
 OpenAdmin terminal stack (`ratatui 0.30.2`, `tui-term 0.3.4`, `vt100 0.16.2`,
@@ -115,12 +110,10 @@ client can be attached at a time: attaching to a session that is already
 attached detaches the other client and hands the session over. `Ctrl+A D`
 detaches from inside the client.
 
-The client runs on the alternate screen. A tiny `scr-guard` process snapshots
-the original termios before raw mode starts and then waits on a pipe. If the
-client dies without unwinding — including SIGKILL — the pipe reaches EOF and the
-guardian restores termios, the screen, mouse modes and cursor. `killall -9 scr`
-therefore removes all sessions and leaves the terminal back at the shell instead
-of showing the UI artifacts.
+The client runs on the alternate screen and restores termios, the screen, mouse
+modes and cursor on detach, exit and panics. A `SIGKILL` cannot run cleanup, so
+`killall -9 scr` leaves the terminal in the alternate screen; run `reset` to
+recover.
 
 ## Layout
 
@@ -151,11 +144,8 @@ untouched.
 - `src/app.rs` — tabs, prefix state machine, mouse routing, dialogs.
 - `src/ui/` — grayscale theme, tab strip, pane, borderless dialogs.
 - `src/picker.rs` — `scr -r` session picker.
-- `src/terminal.rs` — raw mode, alternate screen and the `scr-guard` supervisor.
-- `src/terminal/restore.rs` — screen and termios restoration shared by the
-  client and the guardian.
-- `src/bin/scr-guard.rs` — the helper that restores the terminal after the
-  client dies without unwinding.
+- `src/terminal.rs` — raw mode and alternate screen setup.
+- `src/terminal/restore.rs` — screen restoration.
 - `src/session.rs` — runtime directory, locks, discovery, daemon spawning.
 
 Session output is parsed by `vt100` in the daemon. The daemon renders with
@@ -167,9 +157,8 @@ Raw mode and the alternate screen use `ratatui::try_init()` / `try_restore()`,
 the same pair OpenAdmin uses; mouse/paste/focus reporting comes from crossterm,
 and the daemon's ANSI output is `CrosstermBackend`'s. The remaining process-level
 work uses safe Rust APIs: the daemon gets its own process group through
-`CommandExt::process_group`, and the guardian is an ordinary child process
-started with `Command`, waiting on a pipe. The crate sets
-`unsafe_code = "forbid"`, so no unsafe block can come back unnoticed.
+`CommandExt::process_group`. The crate sets `unsafe_code = "forbid"`, so no
+unsafe block can come back unnoticed.
 
 ## Tests
 

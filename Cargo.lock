@@ -1232,7 +1232,6 @@ dependencies = [
  "dirs",
  "portable-pty",
  "ratatui",
- "rustix",
  "serde",
  "serde_json",
  "tui-input",
