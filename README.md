@@ -1,5 +1,7 @@
 # scr
 
+[![CI](https://github.com/vdudouyt/scr/actions/workflows/ci.yml/badge.svg)](https://github.com/vdudouyt/scr/actions/workflows/ci.yml)
+
 A lightweight, detachable GNU Screen replacement with a modern grayscale TUI.
 
 `scr` runs a small daemon per session, owns the PTYs, and renders the UI with
